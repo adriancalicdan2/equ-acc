@@ -623,9 +623,10 @@ export default function HomePage() {
 
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
+      const vesselNameSafe = (values.vesselInfo?.vesselName || 'Equipment-Accountability-Report').trim().replace(/[\/\\?%*:|"<>]/g, '-');
       const a = document.createElement('a');
       a.href = url;
-      a.download = `Equipment-Accountability-Report-${format(new Date(), 'yyyy-MM-dd')}.zip`;
+      a.download = `${vesselNameSafe}.zip`;
       a.click();
       URL.revokeObjectURL(url);
 
