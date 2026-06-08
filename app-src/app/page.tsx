@@ -143,6 +143,26 @@ const QuantitySelector = ({
   );
 };
 
+function getAllSerialNumbers(values: any): { sn: string; source: string }[] {
+  const sns: { sn: string; source: string }[] = [];
+  const addSns = (raw: string | undefined, category: string) => {
+    if (!raw) return;
+    raw.split(',').map((s: string) => s.trim()).forEach((s: string) => {
+      if (s) {
+        sns.push({ sn: s, source: category });
+      }
+    });
+  };
+
+  addSns(values.flsCapacitance?.serialNumber, 'Fuel Level Sensor (Capacitance)');
+  addSns(values.flsFloater?.serialNumber, 'Fuel Level Sensor (Floater)');
+  addSns(values.network?.serialNumber, 'Network & Telemetry');
+  addSns(values.engine?.serialNumber, 'Engine Monitoring');
+  addSns(values.solar?.serialNumber, 'Solar Power');
+
+  return sns;
+}
+
 export default function HomePage() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -151,6 +171,32 @@ export default function HomePage() {
   const [savedReports, setSavedReports] = useState<any[]>([]);
   const [selectedReportId, setSelectedReportId] = useState<string>('');
   const formRef = useRef<HTMLFormElement>(null);
+
+  const checkDuplicateSns = (values: any, excludeDocId?: string): boolean => {
+    const sns = getAllSerialNumbers(values);
+    // 1. Check duplicates within the form
+    const snValues = sns.map(item => item.sn.toLowerCase());
+    const formDuplicates = snValues.filter((item, index) => snValues.indexOf(item) !== index);
+    if (formDuplicates.length > 0) {
+      const uniqueFormDupes = [...new Set(formDuplicates)];
+      toast.error(`Duplicate Serial Numbers detected in form: ${uniqueFormDupes.join(', ')}`);
+      return false;
+    }
+
+    // 2. Check duplicates across other saved reports
+    for (const report of savedReports) {
+      if (excludeDocId && report.id === excludeDocId) continue;
+      const otherSns = getAllSerialNumbers(report.data);
+      for (const item of sns) {
+        const matching = otherSns.find(o => o.sn.toLowerCase() === item.sn.toLowerCase());
+        if (matching) {
+          toast.error(`Serial Number "${item.sn}" (${item.source}) is already registered to vessel "${report.vesselName}"`);
+          return false;
+        }
+      }
+    }
+    return true;
+  };
 
   // Subscribe to real-time reports from Firestore
   useEffect(() => {
@@ -178,6 +224,9 @@ export default function HomePage() {
     const values = watch();
     if (!values.vesselInfo?.vesselName) {
       toast.error('Vessel Name / IMO No. is required to save a report');
+      return;
+    }
+    if (!checkDuplicateSns(values)) {
       return;
     }
     if (!window.confirm("Are you sure you want to save these details?")) {
@@ -219,6 +268,9 @@ export default function HomePage() {
     const values = watch();
     if (!values.vesselInfo?.vesselName) {
       toast.error('Vessel Name / IMO No. is required');
+      return;
+    }
+    if (!checkDuplicateSns(values, selectedReportId)) {
       return;
     }
     if (!window.confirm("Are you sure you want to save these details?")) {
@@ -514,6 +566,9 @@ export default function HomePage() {
 
   const onSubmit = async (rawValues: AccountabilityFormValues) => {
     const values = rawValues as any;
+    if (!checkDuplicateSns(values, selectedReportId)) {
+      return;
+    }
     setLoading(true);
     setDownloaded(false);
 
