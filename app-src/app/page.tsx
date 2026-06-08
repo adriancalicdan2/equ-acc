@@ -174,88 +174,7 @@ export default function HomePage() {
     return () => unsubscribe();
   }, []);
 
-  const handleLoadReport = (reportId: string) => {
-    if (reportId === 'none') return;
-    const reportObj = savedReports.find((r) => r.id === reportId);
-    if (!reportObj) return;
-
-    setSelectedReportId(reportId);
-    const report = reportObj.data;
-    if (!report) return;
-
-    const parseList = (str: string, expectedLen: number) => {
-      const arr = str ? str.split(',').map((s) => s.trim()) : [];
-      while (arr.length < expectedLen) arr.push('');
-      return arr;
-    };
-
-    const capQ = parseInt(report.flsCapacitance?.qty || '1', 10) || 1;
-    const floaterQ = parseInt(report.flsFloater?.qty || '1', 10) || 1;
-    const netQ = parseInt(report.network?.qty || '1', 10) || 1;
-    const engQ = parseInt(report.engine?.qty || '1', 10) || 1;
-    const solQ = parseInt(report.solar?.qty || '1', 10) || 1;
-
-    setCapSns(parseList(report.flsCapacitance?.serialNumber || '', capQ));
-    setCapTanks(parseList(report.flsCapacitance?.tankAssigned || '', capQ));
-    
-    setFloaterSns(parseList(report.flsFloater?.serialNumber || '', floaterQ * 2));
-    setFloaterTanks(parseList(report.flsFloater?.tankAssigned || '', floaterQ));
-
-    setNetworkSns(parseList(report.network?.serialNumber || '', netQ));
-    
-    setEngineSns(parseList(report.engine?.serialNumber || '', engQ));
-    setEngineAssets(parseList(report.engine?.connectedEngines || '', engQ));
-
-    setSolarSns(parseList(report.solar?.serialNumber || '', solQ));
-    setSolarLocations(parseList(report.solar?.installationLocation || '', solQ));
-
-    reset({
-      copyTypes: report.copyTypes || ['aimf', 'vessel', 'vessel_owner'],
-      vesselInfo: {
-        vesselName: report.vesselInfo?.vesselName || '',
-        installationDate: report.vesselInfo?.installationDate || '',
-        leadEngineer: report.vesselInfo?.leadEngineer || '',
-      },
-      flsCapacitance: {
-        qty: report.flsCapacitance?.qty || '1',
-        tankAssigned: report.flsCapacitance?.tankAssigned || '',
-        serialNumber: report.flsCapacitance?.serialNumber || '',
-        calibrationStatus: report.flsCapacitance?.calibrationStatus || 'good',
-      },
-      flsFloater: {
-        qty: report.flsFloater?.qty || '1',
-        tankAssigned: report.flsFloater?.tankAssigned || '',
-        serialNumber: report.flsFloater?.serialNumber || '',
-        calibrationStatus: report.flsFloater?.calibrationStatus || 'good',
-      },
-      network: {
-        qty: report.network?.qty || '1',
-        serialNumber: report.network?.serialNumber || '',
-        signalStatus: report.network?.signalStatus || 'excellent',
-      },
-      engine: {
-        qty: report.engine?.qty || '1',
-        connectedEngines: report.engine?.connectedEngines || '',
-        serialNumber: report.engine?.serialNumber || '',
-      },
-      solar: {
-        qty: report.solar?.qty || '1',
-        installationLocation: report.solar?.installationLocation || '',
-        serialNumber: report.solar?.serialNumber || '',
-        powerStatus: report.solar?.powerStatus || 'fully_charged',
-      },
-      remarks: report.remarks || '',
-      signoff: {
-        technicianName: report.signoff?.technicianName || '',
-        technicianDesignation: report.signoff?.technicianDesignation || '',
-        signoffDate: report.signoff?.signoffDate || '',
-        receiverName: report.signoff?.receiverName || '',
-        receiverDesignation: report.signoff?.receiverDesignation || '',
-      },
-    });
-
-    toast.success(`Loaded report for ${report.vesselInfo?.vesselName || 'vessel'}`);
-  };
+  // We will use handleSelectReport for loading reports
 
   const handleSaveReport = async () => {
     const values = watch();
@@ -606,34 +525,14 @@ export default function HomePage() {
     }
   };
 
-  const handleSave = async () => {
-    // Validate form values using watch/getValues
-    const values = watch();
-    if (!values.vesselInfo?.vesselName) {
-      toast.error('Validation Error', { description: 'Vessel Name is required to save report.' });
-      return;
-    }
-    setSaving(true);
-    try {
-      await addDoc(collection(firestore, 'reports'), {
-        ...values,
-        createdAt: Timestamp.now()
-      });
-      toast.success('Report saved to database successfully!');
-    } catch (e: unknown) {
-      console.error(e);
-      const msg = e instanceof Error ? e.message : 'Unknown error';
-      toast.error('Failed to save report', { description: msg });
-    } finally {
-      setSaving(false);
-    }
-  };
+
 
   const handleSelectReport = (reportId: string | null) => {
     if (!reportId) return;
     const report = savedReports.find((r) => r.id === reportId);
     if (!report) return;
     
+    setSelectedReportId(reportId);
     // Fill the react-hook-form
     reset(report.data);
 
@@ -713,7 +612,7 @@ export default function HomePage() {
         <div className="bg-card/50 backdrop-blur border border-border/80 rounded-2xl p-5 max-w-xl mx-auto flex flex-col sm:flex-row items-center gap-4 text-left shadow-lg">
           <div className="flex-1 space-y-1 w-full">
             <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Select Saved Vessel Info</Label>
-            <Select onValueChange={handleSelectReport}>
+            <Select value={selectedReportId || undefined} onValueChange={handleSelectReport}>
               <SelectTrigger className="w-full h-11 bg-muted/40 border-border text-sm font-medium focus:ring-1 focus:ring-primary/20">
                 <SelectValue placeholder={savedReports.length > 0 ? "Choose a vessel..." : "No saved vessels found"} />
               </SelectTrigger>
@@ -1154,7 +1053,7 @@ export default function HomePage() {
             <Button
               type="button"
               variant="outline"
-              onClick={handleSave}
+              onClick={handleSaveReport}
               disabled={loading || saving}
               className="h-14 px-6 text-base font-semibold rounded-2xl border-primary/35 text-primary hover:bg-primary/5 transition-all flex-1"
             >
