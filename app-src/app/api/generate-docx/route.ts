@@ -117,8 +117,9 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     console.error('[generate-docx] Error:', err);
+    const msg = err instanceof Error ? err.message : 'Unknown error';
     return NextResponse.json(
-      { error: 'Failed to generate report. Please try again.' },
+      { error: msg },
       { status: 500 }
     );
   }
