@@ -182,6 +182,9 @@ export default function HomePage() {
       toast.error('Vessel Name / IMO No. is required to save a report');
       return;
     }
+    if (!window.confirm("Are you sure you want to save these details?")) {
+      return;
+    }
     setSaving(true);
     try {
       const payload = {
@@ -218,6 +221,9 @@ export default function HomePage() {
     const values = watch();
     if (!values.vesselInfo?.vesselName) {
       toast.error('Vessel Name / IMO No. is required');
+      return;
+    }
+    if (!window.confirm("Are you sure you want to save these details?")) {
       return;
     }
     setSaving(true);
@@ -732,25 +738,27 @@ export default function HomePage() {
             </Button>
 
             {/* Save as New */}
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleSaveNewReport}
-              disabled={loading || saving}
-              className="h-10 px-4 text-xs font-semibold rounded-lg border-primary/35 text-primary hover:bg-primary/5 transition-all flex items-center justify-center"
-            >
-              {saving ? (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
-                  Saving...
-                </>
-              ) : (
-                <>
-                  <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />
-                  Save as New
-                </>
-              )}
-            </Button>
+            {!selectedReportId && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleSaveNewReport}
+                disabled={loading || saving}
+                className="h-10 px-4 text-xs font-semibold rounded-lg border-primary/35 text-primary hover:bg-primary/5 transition-all flex items-center justify-center"
+              >
+                {saving ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />
+                    Save as New
+                  </>
+                )}
+              </Button>
+            )}
 
             {/* Generate & Download */}
             <Button
