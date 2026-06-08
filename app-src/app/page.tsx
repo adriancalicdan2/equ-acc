@@ -15,7 +15,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { PhotoUploader } from '@/components/form/PhotoUploader';
+
 import { accountabilityFormSchema, AccountabilityFormValues } from '@/lib/validations/formSchema';
 import { CopyType } from '@/types/form';
 import { cn } from '@/lib/utils';
@@ -147,9 +147,7 @@ export default function HomePage() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [downloaded, setDownloaded] = useState(false);
-  const [photoState, setPhotoState] = useState<{
-    fls: File[]; network: File[]; engine: File[]; solar: File[];
-  }>({ fls: [], network: [], engine: [], solar: [] });
+
   const [savedReports, setSavedReports] = useState<any[]>([]);
   const [selectedReportId, setSelectedReportId] = useState<string>('');
   const formRef = useRef<HTMLFormElement>(null);
@@ -489,7 +487,7 @@ export default function HomePage() {
       remarks: '',
       signoff: { technicianName: '', technicianDesignation: '', signoffDate: '', receiverName: '', receiverDesignation: '' },
     });
-    setPhotoState({ fls: [], network: [], engine: [], solar: [] });
+
     setCapSns(['']);
     setFloaterSns(['']);
     setNetworkSns(['']);
@@ -559,11 +557,7 @@ export default function HomePage() {
       // Copy types
       fd.append('copyTypes', JSON.stringify(values.copyTypes));
 
-      // Photos
-      photoState.fls.forEach((f) => fd.append('flsPhotos', f));
-      photoState.network.forEach((f) => fd.append('networkPhotos', f));
-      photoState.engine.forEach((f) => fd.append('enginePhotos', f));
-      photoState.solar.forEach((f) => fd.append('solarPhotos', f));
+
 
       const res = await fetch('/api/generate-docx', { method: 'POST', body: fd });
 
@@ -941,14 +935,7 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* FLS Photos */}
-          <div className="border-t border-border pt-5">
-            <PhotoUploader
-              label="FLS Installation Photos (up to 3)"
-              maxFiles={3}
-              onChange={(files) => setPhotoState((p) => ({ ...p, fls: files }))}
-            />
-          </div>
+
         </SectionCard>
 
         {/* ── 3. NETWORK ── */}
@@ -993,13 +980,7 @@ export default function HomePage() {
             </Field>
           </div>
 
-          <div className="border-t border-border pt-5">
-            <PhotoUploader
-              label="Network Installation Photos (up to 3)"
-              maxFiles={3}
-              onChange={(files) => setPhotoState((p) => ({ ...p, network: files }))}
-            />
-          </div>
+
         </SectionCard>
 
         {/* ── 4. ENGINE ── */}
@@ -1051,13 +1032,7 @@ export default function HomePage() {
               </div>
           </div>
 
-          <div className="border-t border-border pt-5">
-            <PhotoUploader
-              label="Engine Monitoring Photos (up to 3)"
-              maxFiles={3}
-              onChange={(files) => setPhotoState((p) => ({ ...p, engine: files }))}
-            />
-          </div>
+
         </SectionCard>
 
         {/* ── 5. SOLAR ── */}
@@ -1119,13 +1094,7 @@ export default function HomePage() {
             </Field>
           </div>
 
-          <div className="border-t border-border pt-5">
-            <PhotoUploader
-              label="Solar Installation Photos (up to 3)"
-              maxFiles={3}
-              onChange={(files) => setPhotoState((p) => ({ ...p, solar: files }))}
-            />
-          </div>
+
         </SectionCard>
 
         {/* ── 6. REMARKS ── */}
