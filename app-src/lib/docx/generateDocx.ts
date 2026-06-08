@@ -20,7 +20,11 @@ const SOURCE_DOCX: Record<CopyType, string> = {
 };
 
 function getTemplatePath(copyType: CopyType): string {
-  // First try pre-built template
+  // First try templates in the public directory (copied automatically by Next.js builder)
+  const publicTemplatePath = path.join(process.cwd(), 'public', 'templates', `${copyType}-template.docx`);
+  if (fs.existsSync(publicTemplatePath)) return publicTemplatePath;
+
+  // Try templates folder directly
   const templatePath = path.join(process.cwd(), 'templates', `${copyType}-template.docx`);
   if (fs.existsSync(templatePath)) return templatePath;
 
@@ -34,7 +38,7 @@ function getTemplatePath(copyType: CopyType): string {
   const srcPathGp = path.join(grandparentDir, SOURCE_DOCX[copyType]);
   if (fs.existsSync(srcPathGp)) return srcPathGp;
 
-  throw new Error(`Template not found for copy type: ${copyType}. Searched: ${templatePath}, ${srcPathP}, ${srcPathGp}`);
+  throw new Error(`Template not found for copy type: ${copyType}. Searched public: ${publicTemplatePath}, templates: ${templatePath}, srcParent: ${srcPathP}`);
 }
 
 function injectPlaceholdersIntoXml(xml: string, copyType: CopyType): string {

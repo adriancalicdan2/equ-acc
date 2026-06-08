@@ -12,7 +12,7 @@ const PizZip = require('pizzip');
 
 const WORKSPACE = path.join(__dirname, '..');
 const SOURCE_DIR = path.join(WORKSPACE, '..'); // parent dir has the original DOCX files
-const TEMPLATES_DIR = path.join(WORKSPACE, 'templates');
+const TEMPLATES_DIR = path.join(WORKSPACE, 'public', 'templates');
 
 if (!fs.existsSync(TEMPLATES_DIR)) {
   fs.mkdirSync(TEMPLATES_DIR, { recursive: true });
