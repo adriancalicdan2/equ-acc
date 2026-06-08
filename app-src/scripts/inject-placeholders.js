@@ -18,13 +18,7 @@ if (!fs.existsSync(TEMPLATES_DIR)) {
   fs.mkdirSync(TEMPLATES_DIR, { recursive: true });
 }
 
-interface TemplateConfig {
-  sourceFile: string;
-  outputFile: string;
-  copyLabel: string;
-}
-
-const configs: TemplateConfig[] = [
+const configs = [
   {
     sourceFile: 'EQUIPMENT ACCOUNTABILITY - AIMF.docx',
     outputFile: 'AIMF-template.docx',
@@ -42,7 +36,7 @@ const configs: TemplateConfig[] = [
   },
 ];
 
-function injectPlaceholders(xml: string): string {
+function injectPlaceholders(xml) {
   let result = xml;
 
   // ─── TABLE 1: Vessel Info ───────────────────────────────────────────────────
@@ -221,7 +215,7 @@ function injectPlaceholders(xml: string): string {
   return result;
 }
 
-function processTemplate(config: TemplateConfig): void {
+function processTemplate(config) {
   const srcPath = path.join(SOURCE_DIR, config.sourceFile);
   const outPath = path.join(TEMPLATES_DIR, config.outputFile);
 
@@ -235,7 +229,7 @@ function processTemplate(config: TemplateConfig): void {
   const content = fs.readFileSync(srcPath);
   const zip = new PizZip(content);
 
-  let xml: string = zip.files['word/document.xml'].asText();
+  let xml = zip.files['word/document.xml'].asText();
   xml = injectPlaceholders(xml);
   zip.file('word/document.xml', xml);
 
