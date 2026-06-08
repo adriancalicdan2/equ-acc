@@ -619,7 +619,7 @@ export default function HomePage() {
         <div className="bg-card/50 backdrop-blur border border-border/80 rounded-2xl p-5 max-w-xl mx-auto flex flex-col sm:flex-row items-center gap-4 text-left shadow-lg">
           <div className="flex-1 space-y-1 w-full">
             <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Select Saved Vessel Info</Label>
-            <Select value={selectedReportId || undefined} onValueChange={handleSelectReport}>
+            <Select key={selectedReportId || 'none'} defaultValue={selectedReportId || undefined} onValueChange={handleSelectReport}>
               <SelectTrigger className="w-full h-11 bg-muted/40 border-border text-sm font-medium focus:ring-1 focus:ring-primary/20">
                 <SelectValue placeholder={savedReports.length > 0 ? "Choose a vessel..." : "No saved vessels found"} />
               </SelectTrigger>
