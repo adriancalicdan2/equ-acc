@@ -619,18 +619,18 @@ export default function HomePage() {
         <div className="bg-card/50 backdrop-blur border border-border/80 rounded-2xl p-5 max-w-xl mx-auto flex flex-col sm:flex-row items-center gap-4 text-left shadow-lg">
           <div className="flex-1 space-y-1 w-full">
             <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Select Saved Vessel Info</Label>
-            <Select key={selectedReportId || 'none'} defaultValue={selectedReportId || undefined} onValueChange={handleSelectReport}>
-              <SelectTrigger className="w-full h-11 bg-muted/40 border-border text-sm font-medium focus:ring-1 focus:ring-primary/20">
-                <SelectValue placeholder={savedReports.length > 0 ? "Choose a vessel..." : "No saved vessels found"} />
-              </SelectTrigger>
-              <SelectContent>
-                {savedReports.map((report) => (
-                  <SelectItem key={report.id} value={report.id}>
-                    {report.vesselName} {report.installationDate ? `(${report.installationDate})` : ''}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <select
+              value={selectedReportId || ''}
+              onChange={(e) => handleSelectReport(e.target.value)}
+              className={cn('w-full h-11 rounded-lg border px-3 py-2 text-sm bg-muted/40 border-border focus:ring-1 focus:ring-primary/20', inputCls)}
+            >
+              <option value="">{savedReports.length > 0 ? "Choose a vessel..." : "No saved vessels found"}</option>
+              {savedReports.map((report) => (
+                <option key={report.id} value={report.id}>
+                  {report.vesselName} {report.installationDate ? `(${report.installationDate})` : ''}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
       </div>
