@@ -19,8 +19,15 @@ const SOURCE_DOCX: Record<CopyType, string> = {
   vessel_owner: 'EQUIPMENT ACCOUNTABILITY - Vessel Owner.docx',
 };
 
+// Maps copy type to the exact case-sensitive compiled template file name
+const TEMPLATE_FILENAMES: Record<CopyType, string> = {
+  aimf: 'AIMF-template.docx',
+  vessel: 'Vessel-template.docx',
+  vessel_owner: 'VesselOwner-template.docx',
+};
+
 function getTemplatePath(copyType: CopyType): string {
-  const fileName = `${copyType}-template.docx`;
+  const fileName = TEMPLATE_FILENAMES[copyType];
   const attemptedPaths: string[] = [];
 
   const checkPath = (p: string) => {

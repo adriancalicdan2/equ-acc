@@ -2,32 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import JSZip from 'jszip';
 import { generateDocx } from '@/lib/docx/generateDocx';
 import { TemplateData, PhotoSet, CopyType } from '@/types/form';
-import fs from 'fs';
-import path from 'path';
-
-function findDocxFiles(dir: string, depth = 0): string[] {
-  if (depth > 6) return [];
-  let results: string[] = [];
-  try {
-    const list = fs.readdirSync(dir);
-    for (const file of list) {
-      const filePath = path.join(dir, file);
-      const stat = fs.statSync(filePath);
-      if (stat.isDirectory()) {
-        if (!file.includes('node_modules') && !file.includes('.git') && !file.includes('.netlify/images')) {
-          results = results.concat(findDocxFiles(filePath, depth + 1));
-        }
-      } else {
-        if (file.endsWith('.docx')) {
-          results.push(filePath);
-        }
-      }
-    }
-  } catch (e) {
-    // ignore
-  }
-  return results;
-}
 
 function formatCalibrationStatus(val: string): string {
   return val === 'good' ? '✔ Good Working Condition' : '✘ Defective';
@@ -143,10 +117,9 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     console.error('[generate-docx] Error:', err);
-    const docxFiles = findDocxFiles('/var/task').join('\n');
     const msg = err instanceof Error ? err.message : 'Unknown error';
     return NextResponse.json(
-      { error: `${msg}\n\nAll .docx files in container:\n${docxFiles || 'NONE FOUND'}` },
+      { error: msg },
       { status: 500 }
     );
   }
