@@ -20,25 +20,59 @@ const SOURCE_DOCX: Record<CopyType, string> = {
 };
 
 function getTemplatePath(copyType: CopyType): string {
-  // First try templates in the public directory (copied automatically by Next.js builder)
-  const publicTemplatePath = path.join(process.cwd(), 'public', 'templates', `${copyType}-template.docx`);
-  if (fs.existsSync(publicTemplatePath)) return publicTemplatePath;
+  const fileName = `${copyType}-template.docx`;
+  const attemptedPaths: string[] = [];
 
-  // Try templates folder directly
-  const templatePath = path.join(process.cwd(), 'templates', `${copyType}-template.docx`);
-  if (fs.existsSync(templatePath)) return templatePath;
+  const checkPath = (p: string) => {
+    attemptedPaths.push(p);
+    return fs.existsSync(p);
+  };
 
-  // Try workspace root directory (parent of process.cwd())
+  // 1. process.cwd() / public / templates
+  let p = path.join(process.cwd(), 'public', 'templates', fileName);
+  if (checkPath(p)) return p;
+
+  // 2. process.cwd() / app-src / public / templates (Netlify sub-dir packaging)
+  p = path.join(process.cwd(), 'app-src', 'public', 'templates', fileName);
+  if (checkPath(p)) return p;
+
+  // 3. process.cwd() / app-src / templates
+  p = path.join(process.cwd(), 'app-src', 'templates', fileName);
+  if (checkPath(p)) return p;
+
+  // 4. Relative to __dirname (webpack standalone bundle paths)
+  p = path.join(__dirname, 'public', 'templates', fileName);
+  if (checkPath(p)) return p;
+
+  p = path.join(__dirname, '..', 'public', 'templates', fileName);
+  if (checkPath(p)) return p;
+
+  p = path.join(__dirname, '..', '..', 'public', 'templates', fileName);
+  if (checkPath(p)) return p;
+
+  p = path.join(__dirname, '..', '..', '..', 'public', 'templates', fileName);
+  if (checkPath(p)) return p;
+
+  p = path.join(__dirname, '..', '..', '..', '..', 'public', 'templates', fileName);
+  if (checkPath(p)) return p;
+
+  p = path.join(__dirname, '..', '..', '..', '..', '..', 'public', 'templates', fileName);
+  if (checkPath(p)) return p;
+
+  // 5. fallback process.cwd() / templates
+  p = path.join(process.cwd(), 'templates', fileName);
+  if (checkPath(p)) return p;
+
+  // 6. Parent directories (local fallback)
   const parentDir = path.join(process.cwd(), '..');
-  const srcPathP = path.join(parentDir, SOURCE_DOCX[copyType]);
-  if (fs.existsSync(srcPathP)) return srcPathP;
+  p = path.join(parentDir, SOURCE_DOCX[copyType]);
+  if (checkPath(p)) return p;
 
-  // Try workspace parent directory (grandparent of process.cwd())
   const grandparentDir = path.join(process.cwd(), '..', '..');
-  const srcPathGp = path.join(grandparentDir, SOURCE_DOCX[copyType]);
-  if (fs.existsSync(srcPathGp)) return srcPathGp;
+  p = path.join(grandparentDir, SOURCE_DOCX[copyType]);
+  if (checkPath(p)) return p;
 
-  throw new Error(`Template not found for copy type: ${copyType}. Searched public: ${publicTemplatePath}, templates: ${templatePath}, srcParent: ${srcPathP}`);
+  throw new Error(`Template not found for copy type: ${copyType}. Checked paths:\n- ${attemptedPaths.join('\n- ')}`);
 }
 
 function injectPlaceholdersIntoXml(xml: string, copyType: CopyType): string {
