@@ -102,13 +102,8 @@ export async function POST(req: NextRequest) {
     };
 
     for (const ct of copyTypes) {
-      try {
-        const docxBuffer = await generateDocx(data, photos, ct);
-        zip.file(fileNames[ct], docxBuffer);
-      } catch (e) {
-        console.error(`[generate-docx] Failed to generate ${ct} copy:`, e);
-        // Continue with other copies
-      }
+      const docxBuffer = await generateDocx(data, photos, ct);
+      zip.file(fileNames[ct], docxBuffer);
     }
 
     const zipBuffer = await zip.generateAsync({ type: 'uint8array', compression: 'DEFLATE' });
