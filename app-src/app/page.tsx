@@ -20,7 +20,7 @@ import { accountabilityFormSchema, AccountabilityFormValues } from '@/lib/valida
 import { CopyType } from '@/types/form';
 import { cn } from '@/lib/utils';
 import { firestore, auth } from '@/lib/firebase/client';
-import { collection, addDoc, onSnapshot, query, orderBy, Timestamp, doc, setDoc } from 'firebase/firestore';
+import { collection, addDoc, onSnapshot, query, orderBy, Timestamp, doc, setDoc, deleteDoc } from 'firebase/firestore';
 import {
   Select,
   SelectContent,
@@ -198,14 +198,21 @@ export default function HomePage() {
         uid: auth?.currentUser?.uid ?? null,
       };
 
-      if (selectedReportId) {
-        await setDoc(doc(firestore, 'reports', selectedReportId), payload, { merge: true });
-        toast.success('Report updated successfully!');
-      } else {
-        const docRef = await addDoc(collection(firestore, 'reports'), payload);
-        setSelectedReportId(docRef.id);
-        toast.success('Report saved successfully!');
+      // Use sanitized vessel name as the document ID
+      const docId = values.vesselInfo.vesselName.trim().replace(/\//g, '-');
+
+      // If the vessel name changed/renamed, delete the old document
+      if (selectedReportId && selectedReportId !== docId) {
+        try {
+          await deleteDoc(doc(firestore, 'reports', selectedReportId));
+        } catch (err) {
+          console.error("Failed to delete renamed document:", err);
+        }
       }
+
+      await setDoc(doc(firestore, 'reports', docId), payload, { merge: true });
+      setSelectedReportId(docId);
+      toast.success('Report saved successfully!');
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Unknown error';
       toast.error('Failed to save report', { description: msg });
