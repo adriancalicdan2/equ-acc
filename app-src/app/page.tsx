@@ -176,7 +176,7 @@ export default function HomePage() {
 
   // We will use handleSelectReport for loading reports
 
-  const handleSaveReport = async () => {
+  const handleSaveNewReport = async () => {
     const values = watch();
     if (!values.vesselInfo?.vesselName) {
       toast.error('Vessel Name / IMO No. is required to save a report');
@@ -198,11 +198,48 @@ export default function HomePage() {
         uid: auth?.currentUser?.uid ?? null,
       };
 
-      // Use sanitized vessel name as the document ID
+      const docId = values.vesselInfo.vesselName.trim().replace(/\//g, '-');
+      await setDoc(doc(firestore, 'reports', docId), payload, { merge: true });
+      setSelectedReportId(docId);
+      toast.success('Report saved as new vessel successfully!');
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Unknown error';
+      toast.error('Failed to save report', { description: msg });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleUpdateReport = async () => {
+    if (!selectedReportId) {
+      toast.error('No vessel selected to update');
+      return;
+    }
+    const values = watch();
+    if (!values.vesselInfo?.vesselName) {
+      toast.error('Vessel Name / IMO No. is required');
+      return;
+    }
+    setSaving(true);
+    try {
+      const payload = {
+        copyTypes: values.copyTypes,
+        vesselInfo: values.vesselInfo,
+        flsCapacitance: values.flsCapacitance,
+        flsFloater: values.flsFloater,
+        network: values.network,
+        engine: values.engine,
+        solar: values.solar,
+        remarks: values.remarks || '',
+        signoff: values.signoff || {},
+        createdAt: new Date(),
+        uid: auth?.currentUser?.uid ?? null,
+      };
+
       const docId = values.vesselInfo.vesselName.trim().replace(/\//g, '-');
 
       // If the vessel name changed/renamed, delete the old document
-      if (selectedReportId && selectedReportId !== docId) {
+      if (selectedReportId !== docId) {
         try {
           await deleteDoc(doc(firestore, 'reports', selectedReportId));
         } catch (err) {
@@ -212,10 +249,27 @@ export default function HomePage() {
 
       await setDoc(doc(firestore, 'reports', docId), payload, { merge: true });
       setSelectedReportId(docId);
-      toast.success('Report saved successfully!');
+      toast.success('Vessel details updated successfully!');
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Unknown error';
-      toast.error('Failed to save report', { description: msg });
+      toast.error('Failed to update report', { description: msg });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteReport = async () => {
+    if (!selectedReportId) return;
+    if (!window.confirm(`Are you sure you want to delete ${selectedReportId}?`)) return;
+
+    setSaving(true);
+    try {
+      await deleteDoc(doc(firestore, 'reports', selectedReportId));
+      toast.success('Vessel deleted successfully!');
+      handleClear();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Unknown error';
+      toast.error('Failed to delete vessel', { description: msg });
     } finally {
       setSaving(false);
     }
@@ -616,8 +670,8 @@ export default function HomePage() {
         </div>
 
         {/* ── SAVED VESSEL SELECTOR ── */}
-        <div className="bg-card/50 backdrop-blur border border-border/80 rounded-2xl p-5 max-w-xl mx-auto flex flex-col sm:flex-row items-center gap-4 text-left shadow-lg">
-          <div className="flex-1 space-y-1 w-full">
+        <div className="bg-card/50 backdrop-blur border border-border/80 rounded-2xl p-5 max-w-xl mx-auto flex flex-col gap-4 text-left shadow-lg">
+          <div className="space-y-1 w-full">
             <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Select Saved Vessel Info</Label>
             <select
               value={selectedReportId || ''}
@@ -632,6 +686,28 @@ export default function HomePage() {
               ))}
             </select>
           </div>
+          {selectedReportId && (
+            <div className="flex gap-3 w-full animate-fadeInUp">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleUpdateReport}
+                disabled={saving || loading}
+                className="flex-1 h-9 text-xs font-semibold rounded-xl border-blue-500/35 text-blue-500 hover:bg-blue-500/5 transition-all"
+              >
+                Update Selected
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleDeleteReport}
+                disabled={saving || loading}
+                className="flex-1 h-9 text-xs font-semibold rounded-xl border-destructive/35 text-destructive hover:bg-destructive/5 transition-all"
+              >
+                Delete Vessel
+              </Button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1060,7 +1136,7 @@ export default function HomePage() {
             <Button
               type="button"
               variant="outline"
-              onClick={handleSaveReport}
+              onClick={handleSaveNewReport}
               disabled={loading || saving}
               className="h-14 px-6 text-base font-semibold rounded-2xl border-primary/35 text-primary hover:bg-primary/5 transition-all flex-1"
             >
