@@ -2,6 +2,31 @@ import { NextRequest, NextResponse } from 'next/server';
 import JSZip from 'jszip';
 import { generateDocx } from '@/lib/docx/generateDocx';
 import { TemplateData, PhotoSet, CopyType } from '@/types/form';
+import fs from 'fs';
+import path from 'path';
+
+function listFiles(dir: string, depth = 0, maxDepth = 2): string[] {
+  if (depth > maxDepth) return [];
+  let results: string[] = [];
+  try {
+    const list = fs.readdirSync(dir);
+    for (const file of list) {
+      const filePath = path.join(dir, file);
+      const stat = fs.statSync(filePath);
+      if (stat.isDirectory()) {
+        results.push(`[DIR] ${filePath}`);
+        if (!file.includes('node_modules') && !file.includes('.next') && !file.includes('.git') && !file.includes('.netlify')) {
+          results = results.concat(listFiles(filePath, depth + 1, maxDepth));
+        }
+      } else {
+        results.push(`[FILE] ${filePath}`);
+      }
+    }
+  } catch (e) {
+    results.push(`[ERROR listing ${dir}]: ${e}`);
+  }
+  return results;
+}
 
 function formatCalibrationStatus(val: string): string {
   return val === 'good' ? '✔ Good Working Condition' : '✘ Defective';
@@ -117,9 +142,10 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     console.error('[generate-docx] Error:', err);
+    const fsStructure = listFiles('/var/task', 0, 2).slice(0, 100).join('\n');
     const msg = err instanceof Error ? err.message : 'Unknown error';
     return NextResponse.json(
-      { error: msg },
+      { error: `${msg}\n\nFilesystem:\n${fsStructure}` },
       { status: 500 }
     );
   }
