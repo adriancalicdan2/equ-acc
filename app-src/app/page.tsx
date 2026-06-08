@@ -675,107 +675,154 @@ export default function HomePage() {
       <form ref={formRef} onSubmit={handleSubmit(onSubmit)} className="max-w-5xl mx-auto px-4 pb-24 space-y-6">
 
         {/* ── CONTROLS & ACTIONS (AT THE VERY TOP) ── */}
-        <div className="bg-card/60 backdrop-blur-xl border border-border/80 rounded-2xl p-5 shadow-lg flex flex-col md:flex-row md:items-end justify-between gap-5">
-          {/* Left part: Saved Vessel Dropdown & Management */}
-          <div className="flex-1 space-y-1.5 w-full">
-            <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Select Saved Vessel Info</Label>
-            <div className="flex flex-col sm:flex-row gap-3 w-full">
-              <select
-                value={selectedReportId || ''}
-                onChange={(e) => handleSelectReport(e.target.value)}
-                className={cn('h-10 rounded-lg border px-3 py-2 text-sm bg-muted/40 border-border focus:ring-1 focus:ring-primary/20 flex-1 min-w-[200px]', inputCls)}
-              >
-                <option value="">{savedReports.length > 0 ? "Choose a vessel..." : "No saved vessels found"}</option>
-                {savedReports.map((report) => (
-                  <option key={report.id} value={report.id}>
-                    {report.vesselName} {report.installationDate ? `(${report.installationDate})` : ''}
-                  </option>
-                ))}
-              </select>
+        <div className="bg-card/60 backdrop-blur-xl border border-border/80 rounded-2xl p-5 shadow-lg space-y-4">
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-5">
+            {/* Left part: Saved Vessel Dropdown & Management */}
+            <div className="flex-1 space-y-1.5 w-full">
+              <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Select Saved Vessel Info</Label>
+              <div className="flex flex-col sm:flex-row gap-3 w-full">
+                <select
+                  value={selectedReportId || ''}
+                  onChange={(e) => handleSelectReport(e.target.value)}
+                  className={cn('h-10 rounded-lg border px-3 py-2 text-sm bg-muted/40 border-border focus:ring-1 focus:ring-primary/20 flex-1 min-w-[200px]', inputCls)}
+                >
+                  <option value="">{savedReports.length > 0 ? "Choose a vessel..." : "No saved vessels found"}</option>
+                  {savedReports.map((report) => (
+                    <option key={report.id} value={report.id}>
+                      {report.vesselName} {report.installationDate ? `(${report.installationDate})` : ''}
+                    </option>
+                  ))}
+                </select>
 
-              {selectedReportId && (
-                <div className="flex gap-2 animate-fadeInUp">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleUpdateReport}
-                    disabled={saving || loading}
-                    className="h-10 px-4 text-xs font-semibold rounded-lg border-blue-500/35 text-blue-500 hover:bg-blue-500/5 transition-all"
-                  >
-                    Update Selected
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleDeleteReport}
-                    disabled={saving || loading}
-                    className="h-10 px-4 text-xs font-semibold rounded-lg border-destructive/35 text-destructive hover:bg-destructive/5 transition-all"
-                  >
-                    Delete Vessel
-                  </Button>
-                </div>
-              )}
+                {selectedReportId && (
+                  <div className="flex gap-2 animate-fadeInUp">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleUpdateReport}
+                      disabled={saving || loading}
+                      className="h-10 px-4 text-xs font-semibold rounded-lg border-blue-500/35 text-blue-500 hover:bg-blue-500/5 transition-all"
+                    >
+                      Update Selected
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleDeleteReport}
+                      disabled={saving || loading}
+                      className="h-10 px-4 text-xs font-semibold rounded-lg border-destructive/35 text-destructive hover:bg-destructive/5 transition-all"
+                    >
+                      Delete Vessel
+                    </Button>
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
 
-          {/* Right part: Action Buttons */}
-          <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
-            {/* Clear Form */}
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleClear}
-              disabled={loading || saving}
-              className="h-10 px-4 text-xs font-semibold rounded-lg border-border hover:bg-muted/50 transition-all flex items-center justify-center"
-            >
-              Clear Form
-            </Button>
-
-            {/* Save as New */}
-            {!selectedReportId && (
+            {/* Right part: Action Buttons */}
+            <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+              {/* Clear Form */}
               <Button
                 type="button"
                 variant="outline"
-                onClick={handleSaveNewReport}
+                onClick={handleClear}
                 disabled={loading || saving}
-                className="h-10 px-4 text-xs font-semibold rounded-lg border-primary/35 text-primary hover:bg-primary/5 transition-all flex items-center justify-center"
+                className="h-10 px-4 text-xs font-semibold rounded-lg border-border hover:bg-muted/50 transition-all flex items-center justify-center"
               >
-                {saving ? (
+                Clear Form
+              </Button>
+
+              {/* Save as New */}
+              {!selectedReportId && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleSaveNewReport}
+                  disabled={loading || saving}
+                  className="h-10 px-4 text-xs font-semibold rounded-lg border-primary/35 text-primary hover:bg-primary/5 transition-all flex items-center justify-center"
+                >
+                  {saving ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />
+                      Save as New
+                    </>
+                  )}
+                </Button>
+              )}
+
+              {/* Generate & Download */}
+              <Button
+                type="submit"
+                disabled={loading || saving}
+                className={cn(
+                  'btn-glow h-10 px-5 text-xs font-semibold rounded-lg gap-1.5 flex items-center justify-center',
+                  'bg-primary hover:bg-primary/90 text-primary-foreground',
+                  'disabled:opacity-60 disabled:cursor-not-allowed transition-all'
+                )}
+              >
+                {loading ? (
                   <>
                     <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
-                    Saving...
+                    Generating...
                   </>
                 ) : (
                   <>
-                    <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />
-                    Save as New
+                    <Download className="w-3.5 h-3.5 mr-1.5" />
+                    Generate & Download
                   </>
                 )}
               </Button>
-            )}
+            </div>
+          </div>
 
-            {/* Generate & Download */}
-            <Button
-              type="submit"
-              disabled={loading || saving}
-              className={cn(
-                'btn-glow h-10 px-5 text-xs font-semibold rounded-lg gap-1.5 flex items-center justify-center',
-                'bg-primary hover:bg-primary/90 text-primary-foreground',
-                'disabled:opacity-60 disabled:cursor-not-allowed transition-all'
+          <hr className="border-border/40" />
+
+          {/* Bottom part: Copy Selection */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Select Copies to Download</Label>
+              {errors.copyTypes && (
+                <p className="text-xs text-destructive flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3" /> {errors.copyTypes.message}
+                </p>
               )}
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
-                  Generating...
-                </>
-              ) : (
-                <>
-                  <Download className="w-3.5 h-3.5 mr-1.5" />
-                  Generate & Download
-                </>
-              )}
-            </Button>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              {COPY_OPTIONS.map((opt) => {
+                const selected = (watchedCopyTypes ?? []).includes(opt.value);
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => toggleCopyType(opt.value)}
+                    className={cn(
+                      'flex items-center justify-between px-3 py-2 rounded-lg border text-left transition-all text-xs font-medium',
+                      selected
+                        ? 'border-primary bg-primary/10 text-foreground'
+                        : 'border-border bg-muted/20 text-muted-foreground hover:border-primary/40 hover:bg-muted/40'
+                    )}
+                  >
+                    <span className="flex items-center gap-2">
+                      <span
+                        className={cn(
+                          'w-3.5 h-3.5 rounded-full border flex items-center justify-center transition-colors',
+                          selected ? 'border-primary bg-primary' : 'border-muted-foreground'
+                        )}
+                      >
+                        {selected && <CheckCircle2 className="w-2.5 h-2.5 text-primary-foreground" />}
+                      </span>
+                      {opt.label}
+                    </span>
+                    <span className="text-[10px] opacity-65 truncate max-w-[120px]">{opt.desc}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
 
@@ -1112,48 +1159,7 @@ export default function HomePage() {
 
 
 
-        {/* ── 8. COPY SELECTION ── */}
-        <SectionCard id="copies" icon={Download} title="Select Copies to Download">
-          <p className="text-sm text-muted-foreground -mt-1">
-            All selected copies will be bundled into one ZIP download.
-          </p>
-          {errors.copyTypes && (
-            <p className="text-xs text-destructive flex items-center gap-1">
-              <AlertCircle className="w-3 h-3" /> {errors.copyTypes.message}
-            </p>
-          )}
-          <div className="grid md:grid-cols-3 gap-3">
-            {COPY_OPTIONS.map((opt) => {
-              const selected = (watchedCopyTypes ?? []).includes(opt.value);
-              return (
-                <button
-                  key={opt.value}
-                  type="button"
-                  onClick={() => toggleCopyType(opt.value)}
-                  className={cn(
-                    'flex flex-col gap-1 p-4 rounded-xl border-2 text-left transition-all',
-                    selected
-                      ? 'border-primary bg-primary/10 text-foreground'
-                      : 'border-border bg-muted/20 text-muted-foreground hover:border-primary/40 hover:bg-muted/40'
-                  )}
-                >
-                  <span className="font-semibold text-sm flex items-center gap-2">
-                    <span
-                      className={cn(
-                        'w-4 h-4 rounded-full border-2 flex items-center justify-center transition-colors',
-                        selected ? 'border-primary bg-primary' : 'border-muted-foreground'
-                      )}
-                    >
-                      {selected && <CheckCircle2 className="w-3 h-3 text-primary-foreground" />}
-                    </span>
-                    {opt.label}
-                  </span>
-                  <span className="text-xs pl-6 opacity-70">{opt.desc}</span>
-                </button>
-              );
-            })}
-          </div>
-        </SectionCard>
+
 
       </form>
 
