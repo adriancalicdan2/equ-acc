@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 export const vesselInfoSchema = z.object({
   vesselName: z.string().min(1, 'Vessel Name / IMO No. is required'),
-  installationDate: z.string().min(1, 'Installation Date is required'),
+  installationDate: z.string().optional().default(''),
   leadEngineer: z.string().min(1, 'Lead Engineer name is required'),
 });
 
