@@ -1,0 +1,9 @@
+# Ignore Google Service Account Credentials / Secrets
+equipment-accountability-*.json
+*.json.local
+.env.local
+app-src/.env.local
+
+# Ignore locally extracted/generated docx files (optional, but good practice)
+docx_extracted/
+*.docx

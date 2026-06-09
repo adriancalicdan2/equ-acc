@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import JSZip from 'jszip';
 import { generateDocx } from '@/lib/docx/generateDocx';
 import { TemplateData, PhotoSet, CopyType } from '@/types/form';
+import { getAccessTokenFromRefreshToken, createGoogleFolderServer, uploadFileServer } from '@/lib/googleDriveServer';
 
 function formatCalibrationStatus(val: string): string {
   return val === 'good' ? '✔ Good Working Condition' : '✘ Defective';
@@ -93,14 +94,45 @@ export async function POST(req: NextRequest) {
       solarPhotos: await extractPhotos(formData, 'solarPhotos'),
     };
 
+    const uploadToDrive = formData.get('uploadToDrive') === 'true';
+
     // Generate each selected DOCX
-    const zip = new JSZip();
     const fileNames: Record<CopyType, string> = {
       aimf: 'Equipment-Accountability-AIMF-Copy.docx',
       vessel: 'Equipment-Accountability-Vessel-Copy.docx',
       vessel_owner: 'Equipment-Accountability-VesselOwner-Copy.docx',
     };
 
+    if (uploadToDrive) {
+      const clientId = process.env.GOOGLE_CLIENT_ID;
+      const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+      const refreshToken = process.env.GOOGLE_REFRESH_TOKEN;
+      const parentFolderId = process.env.GOOGLE_DRIVE_PARENT_FOLDER_ID;
+
+      if (!clientId || !clientSecret || !refreshToken || !parentFolderId) {
+        return NextResponse.json(
+          { error: 'Google OAuth variables (Client ID, Client Secret, Refresh Token, or Parent Folder ID) are not configured on the server.' },
+          { status: 500 }
+        );
+      }
+
+      const token = await getAccessTokenFromRefreshToken(clientId, clientSecret, refreshToken);
+      const folderName = `${data.vesselName.trim()} - Equipment accountability reports`;
+      const folderId = await createGoogleFolderServer(folderName, parentFolderId, token);
+
+      for (const ct of copyTypes) {
+        const docxBuffer = await generateDocx(data, photos, ct);
+        await uploadFileServer(fileNames[ct], docxBuffer, folderId, token);
+      }
+
+      return NextResponse.json({
+        success: true,
+        folderUrl: `https://drive.google.com/drive/folders/${folderId}`,
+        folderName
+      });
+    }
+
+    const zip = new JSZip();
     for (const ct of copyTypes) {
       const docxBuffer = await generateDocx(data, photos, ct);
       // Use STORE (no compression) for docx files — they are already

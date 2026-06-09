@@ -8,7 +8,7 @@ import {
   FileText, Ship, Wifi, Zap, Sun, StickyNote, PenLine,
   Download, Loader2, CheckCircle2, ChevronRight, AlertCircle, Search,
 } from 'lucide-react';
- 
+
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -197,6 +197,79 @@ export default function HomePage() {
     const current = savedReports.find((r) => r.id === selectedReportId);
     setVesselSearchQuery(current ? current.vesselName : '');
   }, [selectedReportId, savedReports]);
+
+  const [uploadingToDrive, setUploadingToDrive] = useState(false);
+
+  const handleUploadToGoogleDrive = async () => {
+    const values = watch();
+    if (!values.vesselInfo?.vesselName) {
+      toast.error('Vessel Name / IMO No. is required to upload reports');
+      return;
+    }
+    if (!values.copyTypes || values.copyTypes.length === 0) {
+      toast.error('Select at least one copy type to generate');
+      return;
+    }
+
+    setUploadingToDrive(true);
+    const toastId = toast.loading('Generating and uploading documents directly to Google Drive...');
+
+    try {
+      const fd = new FormData();
+      fd.append('vesselName', values.vesselInfo.vesselName);
+      fd.append('installationDate', values.vesselInfo.installationDate || '');
+      fd.append('leadEngineer', values.vesselInfo.leadEngineer || '');
+
+      fd.append('flsCapacitanceQty', values.flsCapacitance?.qty || '1');
+      fd.append('flsCapacitanceTank', values.flsCapacitance?.tankAssigned || '');
+      fd.append('flsCapacitanceSN', values.flsCapacitance?.serialNumber || '');
+      fd.append('flsCapacitanceStatus', values.flsCapacitance?.calibrationStatus || 'good');
+
+      fd.append('flsFloaterQty', String(floaterQty * 2));
+      fd.append('flsFloaterTank', values.flsFloater?.tankAssigned || '');
+      fd.append('flsFloaterSN', values.flsFloater?.serialNumber || '');
+      fd.append('flsFloaterStatus', values.flsFloater?.calibrationStatus || 'good');
+
+      fd.append('networkQty', values.network?.qty || '1');
+      fd.append('networkSN', values.network?.serialNumber || '');
+      fd.append('networkSignalStatus', values.network?.signalStatus || 'excellent');
+
+      fd.append('engineQty', values.engine?.qty || '1');
+      fd.append('engineConnected', values.engine?.connectedEngines || '');
+      fd.append('engineSN', values.engine?.serialNumber || '');
+
+      fd.append('solarQty', values.solar?.qty || '1');
+      fd.append('solarLocation', values.solar?.installationLocation || '');
+      fd.append('solarSN', values.solar?.serialNumber || '');
+      fd.append('solarPowerStatus', values.solar?.powerStatus || 'fully_charged');
+
+      fd.append('remarks', values.remarks?.trim() || 'Installation done properly');
+      fd.append('copyTypes', JSON.stringify(values.copyTypes));
+      fd.append('uploadToDrive', 'true');
+
+      const res = await fetch('/api/generate-docx', { method: 'POST', body: fd });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error ?? 'Background generation/upload failed');
+      }
+
+      const data = await res.json();
+
+      toast.success('Uploaded directly to Google Drive!', {
+        id: toastId,
+        description: `Vessel folder "${data.folderName}" created successfully.`,
+        action: {
+          label: 'Open Folder',
+          onClick: () => window.open(data.folderUrl, '_blank'),
+        },
+        duration: 10000,
+      });
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to upload to Google Drive', { id: toastId });
+    } finally {
+      setUploadingToDrive(false);
+    }
+  };
 
   const checkDuplicateSns = (values: any, excludeDocId?: string): boolean => {
     const sns = getAllSerialNumbers(values);
@@ -757,125 +830,130 @@ export default function HomePage() {
       <form ref={formRef} onSubmit={handleSubmit(onSubmit)} className="max-w-5xl mx-auto px-4 pb-24 space-y-6">
 
         {/* ── CONTROLS & ACTIONS (AT THE VERY TOP) ── */}
-        <div className="bg-card/60 backdrop-blur-xl border border-border/80 rounded-2xl p-5 shadow-lg space-y-4">
-          <div className="flex flex-col md:flex-row md:items-end justify-between gap-5">
-            {/* Left part: Saved Vessel Dropdown & Management */}
-            <div className="flex-1 space-y-1.5 w-full relative" ref={dropdownRef}>
-              <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Select Saved Vessel Info</Label>
-              <div className="flex flex-col sm:flex-row gap-3 w-full items-start sm:items-center">
-                <div className="relative flex-1 min-w-[240px] w-full">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white" />
-                  <input
-                    type="text"
-                    placeholder={savedReports.length > 0 ? "Search/select a vessel..." : "No saved vessels found"}
-                    value={vesselSearchQuery}
-                    onFocus={() => setIsOpen(true)}
-                    onChange={(e) => {
-                      setVesselSearchQuery(e.target.value);
-                      setIsOpen(true);
-                    }}
-                    className={cn(
-                      'h-10 w-full rounded-lg border pl-9 pr-10 py-2 text-sm bg-[hsl(var(--muted))] border-border focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all outline-none text-white'
-                    )}
-                  />
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
-                    {vesselSearchQuery && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setVesselSearchQuery('');
-                          setSelectedReportId('');
-                          setIsOpen(true);
-                        }}
-                        className="p-0.5 hover:bg-muted rounded text-white hover:text-white/80 transition-colors"
-                      >
-                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
-                    )}
+        <div className="bg-card/60 backdrop-blur-xl border border-border/80 rounded-2xl p-5 shadow-lg space-y-5">
+          {/* Row 1: Saved Vessel Selector & Management */}
+          <div className="space-y-1.5 w-full relative" ref={dropdownRef}>
+            <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Select Saved Vessel Info</Label>
+            <div className="flex flex-col md:flex-row gap-3 w-full items-start md:items-center">
+              <div className="relative flex-1 min-w-[260px] max-w-md w-full">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white" />
+                <input
+                  type="text"
+                  placeholder={savedReports.length > 0 ? "Search/select a vessel..." : "No saved vessels found"}
+                  value={vesselSearchQuery}
+                  onFocus={() => setIsOpen(true)}
+                  onChange={(e) => {
+                    setVesselSearchQuery(e.target.value);
+                    setIsOpen(true);
+                  }}
+                  className={cn(
+                    'h-10 w-full rounded-lg border pl-9 pr-10 py-2 text-sm bg-[hsl(var(--muted))] border-border focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all outline-none text-white'
+                  )}
+                />
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+                  {vesselSearchQuery && (
                     <button
                       type="button"
-                      onClick={() => setIsOpen(!isOpen)}
+                      onClick={() => {
+                        setVesselSearchQuery('');
+                        setSelectedReportId('');
+                        setIsOpen(true);
+                      }}
                       className="p-0.5 hover:bg-muted rounded text-white hover:text-white/80 transition-colors"
                     >
-                      <svg className={cn("w-4 h-4 transition-transform duration-200", isOpen && "rotate-180")} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                       </svg>
                     </button>
-                  </div>
-
-                  {/* Dropdown Menu */}
-                  {isOpen && (
-                    <div className="absolute z-50 w-full mt-1.5 bg-[hsl(var(--muted))] border border-border/80 rounded-xl shadow-xl max-h-60 overflow-y-auto backdrop-blur-xl animate-fadeInUp">
-                      {filteredReports.length > 0 ? (
-                        filteredReports.map((report) => (
-                          <button
-                            key={report.id}
-                            type="button"
-                            onClick={() => {
-                              handleSelectReport(report.id);
-                              setVesselSearchQuery(report.vesselName);
-                              setIsOpen(false);
-                            }}
-                            className={cn(
-                              "w-full text-left px-4 py-2 text-sm transition-all flex flex-col gap-0.5 text-white hover:bg-secondary border-l-2 border-transparent hover:border-primary",
-                              selectedReportId === report.id ? "bg-primary/20 border-l-2 border-primary text-primary" : ""
-                            )}
-                          >
-                            <span className="font-medium">{report.vesselName}</span>
-                            {report.installationDate && (
-                              <span className="text-xs text-muted-foreground">{report.installationDate}</span>
-                            )}
-                          </button>
-                        ))
-                      ) : (
-                        <div className="px-4 py-3 text-sm text-muted-foreground text-center">
-                          No vessels found
-                        </div>
-                      )}
-                    </div>
                   )}
+                  <button
+                    type="button"
+                    onClick={() => setIsOpen(!isOpen)}
+                    className="p-0.5 hover:bg-muted rounded text-white hover:text-white/80 transition-colors"
+                  >
+                    <svg className={cn("w-4 h-4 transition-transform duration-200", isOpen && "rotate-180")} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
                 </div>
 
-                {selectedReportId && (
-                  <div className="flex gap-2 animate-fadeInUp w-full sm:w-auto">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={handleUpdateReport}
-                      disabled={saving || loading}
-                      className="h-10 px-4 text-xs font-semibold rounded-lg bg-blue-600 border-blue-700 text-white hover:bg-blue-500 hover:border-blue-400 hover:shadow-[0_0_14px_rgba(59,130,246,0.5)] active:scale-[0.98] transition-all duration-200 flex-1 sm:flex-none"
-                    >
-                      Update Selected
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={handleDeleteReport}
-                      disabled={saving || loading}
-                      className="h-10 px-4 text-xs font-semibold rounded-lg bg-red-700 border-red-800 text-white hover:bg-red-600 hover:border-red-500 hover:shadow-[0_0_14px_rgba(239,68,68,0.5)] active:scale-[0.98] transition-all duration-200 flex-1 sm:flex-none"
-                    >
-                      Delete Vessel
-                    </Button>
+                {/* Dropdown Menu */}
+                {isOpen && (
+                  <div className="absolute z-50 w-full mt-1.5 bg-[hsl(var(--muted))] border border-border/80 rounded-xl shadow-xl max-h-60 overflow-y-auto backdrop-blur-xl animate-fadeInUp">
+                    {filteredReports.length > 0 ? (
+                      filteredReports.map((report) => (
+                        <button
+                          key={report.id}
+                          type="button"
+                          onClick={() => {
+                            handleSelectReport(report.id);
+                            setVesselSearchQuery(report.vesselName);
+                            setIsOpen(false);
+                          }}
+                          className={cn(
+                            "w-full text-left px-4 py-2 text-sm transition-all flex flex-col gap-0.5 text-white hover:bg-secondary border-l-2 border-transparent hover:border-primary",
+                            selectedReportId === report.id ? "bg-primary/20 border-l-2 border-primary text-primary" : ""
+                          )}
+                        >
+                          <span className="font-medium">{report.vesselName}</span>
+                          {report.installationDate && (
+                            <span className="text-xs text-muted-foreground">{report.installationDate}</span>
+                          )}
+                        </button>
+                      ))
+                    ) : (
+                      <div className="px-4 py-3 text-sm text-muted-foreground text-center">
+                        No vessels found
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
-            </div>
 
-            {/* Right part: Action Buttons */}
-            <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
-              {/* Clear Form */}
+              {selectedReportId && (
+                <div className="flex gap-2 animate-fadeInUp w-full md:w-auto">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleUpdateReport}
+                    disabled={saving || loading}
+                    className="h-10 px-4 text-xs font-semibold rounded-lg bg-blue-600 border-blue-700 text-white hover:bg-blue-500 hover:border-blue-400 hover:shadow-[0_0_14px_rgba(59,130,246,0.5)] active:scale-[0.98] transition-all duration-200 flex-1 md:flex-none"
+                  >
+                    Update Selected
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleDeleteReport}
+                    disabled={saving || loading}
+                    className="h-10 px-4 text-xs font-semibold rounded-lg bg-red-700 border-red-800 text-white hover:bg-red-600 hover:border-red-500 hover:shadow-[0_0_14px_rgba(239,68,68,0.5)] active:scale-[0.98] transition-all duration-200 flex-1 md:flex-none"
+                  >
+                    Delete Vessel
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <hr className="border-border/40" />
+
+          {/* Row 2: Action Buttons */}
+          <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3 w-full">
+            {/* Left aligned: Clear Form */}
+            <div className="flex justify-start">
               <Button
                 type="button"
                 variant="outline"
                 onClick={handleClear}
                 disabled={loading || saving}
-                className="h-10 px-4 text-xs font-semibold rounded-lg bg-slate-600 border-slate-700 text-white hover:bg-slate-500 hover:border-slate-400 hover:shadow-[0_0_10px_rgba(100,116,139,0.4)] active:scale-[0.98] transition-all duration-200 flex items-center justify-center"
+                className="h-10 px-4 text-xs font-semibold rounded-lg bg-slate-600 border-slate-700 text-white hover:bg-slate-500 hover:border-slate-400 hover:shadow-[0_0_10px_rgba(100,116,139,0.4)] active:scale-[0.98] transition-all duration-200 w-full sm:w-auto flex items-center justify-center"
               >
                 Clear Form
               </Button>
+            </div>
 
+            {/* Right aligned: Save as New, Upload, and Download */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
               {/* Save as New */}
               {!selectedReportId && (
                 <Button
@@ -883,7 +961,7 @@ export default function HomePage() {
                   variant="outline"
                   onClick={handleSaveNewReport}
                   disabled={loading || saving}
-                  className="h-10 px-4 text-xs font-semibold rounded-lg bg-emerald-600 border-emerald-700 text-white hover:bg-emerald-500 hover:border-emerald-400 hover:shadow-[0_0_14px_rgba(16,185,129,0.5)] active:scale-[0.98] transition-all duration-200 flex items-center justify-center"
+                  className="h-10 px-4 text-xs font-semibold rounded-lg bg-emerald-600 border-emerald-700 text-white hover:bg-emerald-500 hover:border-emerald-400 hover:shadow-[0_0_14px_rgba(16,185,129,0.5)] active:scale-[0.98] transition-all duration-200 w-full sm:w-auto flex items-center justify-center"
                 >
                   {saving ? (
                     <>
@@ -899,11 +977,35 @@ export default function HomePage() {
                 </Button>
               )}
 
+              {/* Upload to Google Drive */}
+              <Button
+                type="button"
+                onClick={handleUploadToGoogleDrive}
+                disabled={loading || saving || uploadingToDrive}
+                className="h-10 px-5 text-xs font-semibold rounded-lg gap-1.5 flex items-center justify-center bg-teal-600 border-teal-700 text-white hover:bg-teal-500 hover:border-teal-400 hover:shadow-[0_0_20px_rgba(20,184,166,0.6)] active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200 w-full sm:w-auto"
+              >
+                {uploadingToDrive ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
+                    Uploading...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4 mr-1.5" viewBox="0 0 24 24" fill="none">
+                      <path fill="#0066da" d="M19.38 17h-11.7l-3.32-6h11.7l3.32 6z"/>
+                      <path fill="#00ac47" d="M9.1 17l6.02-10.87h5.83l-6.02 10.87h-5.83z"/>
+                      <path fill="#ffba00" d="M3.82 11l6.02-10.87h5.83l-6.02 10.87h-5.83z"/>
+                    </svg>
+                    Upload to Drive
+                  </>
+                )}
+              </Button>
+
               {/* Generate & Download */}
               <Button
                 type="submit"
-                disabled={loading || saving}
-                className="btn-glow h-10 px-5 text-xs font-semibold rounded-lg gap-1.5 flex items-center justify-center bg-blue-600 border-blue-700 text-white hover:bg-blue-500 hover:shadow-[0_0_20px_rgba(59,130,246,0.6)] active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200"
+                disabled={loading || saving || uploadingToDrive}
+                className="h-10 px-5 text-xs font-semibold rounded-lg gap-1.5 flex items-center justify-center bg-blue-600 border-blue-700 text-white hover:bg-blue-500 hover:border-blue-400 hover:shadow-[0_0_20px_rgba(59,130,246,0.6)] active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200 w-full sm:w-auto"
               >
                 {loading ? (
                   <>
@@ -919,8 +1021,6 @@ export default function HomePage() {
               </Button>
             </div>
           </div>
-
-          <hr className="border-border/40" />
 
           {/* Bottom part: Copy Selection */}
           <div className="space-y-2">
