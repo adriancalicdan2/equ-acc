@@ -103,16 +103,19 @@ export async function POST(req: NextRequest) {
 
     for (const ct of copyTypes) {
       const docxBuffer = await generateDocx(data, photos, ct);
-      zip.file(fileNames[ct], docxBuffer);
+      // Use STORE (no compression) for docx files — they are already
+      // internally compressed. Re-applying DEFLATE corrupts them.
+      zip.file(fileNames[ct], docxBuffer, { compression: 'STORE' });
     }
 
-    const zipBuffer = await zip.generateAsync({ type: 'uint8array', compression: 'DEFLATE' });
+    const zipBuffer = await zip.generateAsync({ type: 'nodebuffer', compression: 'STORE' });
 
-    return new NextResponse(zipBuffer as any, {
+    return new NextResponse(new Uint8Array(zipBuffer), {
       status: 200,
       headers: {
         'Content-Type': 'application/zip',
         'Content-Disposition': `attachment; filename="Equipment-Accountability-Report.zip"`,
+        'Content-Length': String(zipBuffer.length),
       },
     });
   } catch (err) {

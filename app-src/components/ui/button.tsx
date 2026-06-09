@@ -8,16 +8,22 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary/80",
+        // Primary — vivid dodger blue with gradient & glow on hover
+        default:
+          "bg-gradient-to-b from-[hsl(210,100%,65%)] to-[hsl(210,100%,55%)] text-[hsl(214,50%,8%)] border-[hsl(210,100%,48%)] shadow-[0_2px_8px_hsl(210,100%,50%,0.35)] hover:from-[hsl(210,100%,72%)] hover:to-[hsl(210,100%,62%)] hover:text-[hsl(214,50%,6%)] hover:shadow-[0_4px_20px_hsl(210,100%,55%,0.55)] active:scale-[0.98] transition-all duration-200",
+        // Outline — shows border, fills with navy-blue on hover
         outline:
-          "border-border bg-background hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
+          "border-[hsl(214,40%,30%)] bg-[hsl(214,48%,15%)] text-[hsl(210,60%,90%)] hover:bg-[hsl(210,80%,22%)] hover:border-[hsl(210,100%,62%)] hover:text-[hsl(210,100%,88%)] hover:shadow-[0_0_12px_hsl(210,100%,55%,0.25)] active:scale-[0.98] transition-all duration-200",
+        // Secondary — medium navy with steel-blue hover
         secondary:
-          "bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground",
+          "bg-[hsl(214,40%,20%)] text-[hsl(210,60%,88%)] border-[hsl(214,40%,28%)] hover:bg-[hsl(214,50%,26%)] hover:border-[hsl(210,70%,45%)] hover:text-[hsl(210,80%,92%)] active:scale-[0.98] transition-all duration-200",
+        // Ghost — transparent with blue highlight on hover
         ghost:
-          "hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:hover:bg-muted/50",
+          "text-[hsl(210,60%,85%)] hover:bg-[hsl(210,80%,20%)] hover:text-[hsl(210,90%,90%)] active:scale-[0.98] transition-all duration-200",
+        // Destructive — red tint with red glow on hover
         destructive:
-          "bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40",
-        link: "text-primary underline-offset-4 hover:underline",
+          "bg-[hsl(0,70%,18%)] text-[hsl(0,90%,75%)] border-[hsl(0,70%,30%)] hover:bg-[hsl(0,75%,24%)] hover:border-[hsl(0,85%,55%)] hover:text-[hsl(0,100%,88%)] hover:shadow-[0_0_16px_hsl(0,85%,55%,0.40)] active:scale-[0.98] transition-all duration-200",
+        link: "text-[hsl(210,100%,65%)] underline-offset-4 hover:underline hover:text-[hsl(210,100%,82%)] transition-colors duration-150",
       },
       size: {
         default:

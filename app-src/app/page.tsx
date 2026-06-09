@@ -757,7 +757,7 @@ export default function HomePage() {
                       variant="outline"
                       onClick={handleUpdateReport}
                       disabled={saving || loading}
-                      className="h-10 px-4 text-xs font-semibold rounded-lg border-blue-500/35 text-blue-500 hover:bg-blue-500/5 transition-all"
+                      className="h-10 px-4 text-xs font-semibold rounded-lg bg-blue-600 border-blue-700 text-white hover:bg-blue-500 hover:shadow-[0_0_14px_rgba(59,130,246,0.5)] active:scale-[0.98] transition-all duration-200"
                     >
                       Update Selected
                     </Button>
@@ -766,7 +766,7 @@ export default function HomePage() {
                       variant="outline"
                       onClick={handleDeleteReport}
                       disabled={saving || loading}
-                      className="h-10 px-4 text-xs font-semibold rounded-lg border-destructive/35 text-destructive hover:bg-destructive/5 transition-all"
+                      className="h-10 px-4 text-xs font-semibold rounded-lg bg-red-700 border-red-800 text-white hover:bg-red-600 hover:shadow-[0_0_14px_rgba(239,68,68,0.5)] active:scale-[0.98] transition-all duration-200"
                     >
                       Delete Vessel
                     </Button>
@@ -783,7 +783,7 @@ export default function HomePage() {
                 variant="outline"
                 onClick={handleClear}
                 disabled={loading || saving}
-                className="h-10 px-4 text-xs font-semibold rounded-lg border-border hover:bg-muted/50 transition-all flex items-center justify-center"
+                className="h-10 px-4 text-xs font-semibold rounded-lg bg-slate-600 border-slate-700 text-white hover:bg-slate-500 hover:text-black hover:shadow-[0_0_10px_rgba(100,116,139,0.4)] active:scale-[0.98] transition-all duration-200 flex items-center justify-center"
               >
                 Clear Form
               </Button>
@@ -795,7 +795,7 @@ export default function HomePage() {
                   variant="outline"
                   onClick={handleSaveNewReport}
                   disabled={loading || saving}
-                  className="h-10 px-4 text-xs font-semibold rounded-lg border-primary/35 text-primary hover:bg-primary/5 transition-all flex items-center justify-center"
+                  className="h-10 px-4 text-xs font-semibold rounded-lg bg-emerald-600 border-emerald-700 text-white hover:bg-emerald-500 hover:text-black hover:shadow-[0_0_14px_rgba(16,185,129,0.5)] active:scale-[0.98] transition-all duration-200 flex items-center justify-center"
                 >
                   {saving ? (
                     <>
@@ -815,11 +815,7 @@ export default function HomePage() {
               <Button
                 type="submit"
                 disabled={loading || saving}
-                className={cn(
-                  'btn-glow h-10 px-5 text-xs font-semibold rounded-lg gap-1.5 flex items-center justify-center',
-                  'bg-primary hover:bg-primary/90 text-primary-foreground',
-                  'disabled:opacity-60 disabled:cursor-not-allowed transition-all'
-                )}
+                className="btn-glow h-10 px-5 text-xs font-semibold rounded-lg gap-1.5 flex items-center justify-center bg-blue-600 border-blue-700 text-white hover:bg-blue-500 hover:shadow-[0_0_20px_rgba(59,130,246,0.6)] active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200"
               >
                 {loading ? (
                   <>

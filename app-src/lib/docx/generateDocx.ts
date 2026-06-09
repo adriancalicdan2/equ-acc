@@ -105,9 +105,11 @@ function injectPlaceholdersIntoXml(xml: string, copyType: CopyType): string {
   // Network
   result = result.replace(/(<w:p[^>]*w14:paraId="6F5761A3"[^>]*>)([\s\S]*?)(<\/w:p>)/, '$1<w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:t>{networkQty}</w:t></w:r>$3');
   result = result.replace(/(<w:p[^>]*w14:paraId="0649AFD1"[^>]*>)([\s\S]*?)(<\/w:p>)/, '$1<w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:t>{networkSN}</w:t></w:r>$3');
-  // Signal status: replace the multi-paragraph checkbox block
+  // Signal status: replace the entire multi-paragraph checkbox block with a single paragraph.
+  // The pattern must match from the opening of the first <w:p> all the way through the
+  // closing </w:p> of the last paragraph in the group, so no unclosed tags are left.
   result = result.replace(
-    /(<w:p[^>]*w14:paraId="53EA934E"[^>]*>)[\s\S]*?(<w:p[^>]*w14:paraId="58AF202E"[^>]*>[\s\S]*?<\/w:p>)/,
+    /(<w:p[^>]*w14:paraId="53EA934E"[^>]*>)[\s\S]*?<w:p[^>]*w14:paraId="58AF202E"[^>]*>[\s\S]*?<\/w:p>/,
     '$1<w:r><w:t>{networkSignalStatus}</w:t></w:r></w:p>'
   );
 
@@ -120,8 +122,9 @@ function injectPlaceholdersIntoXml(xml: string, copyType: CopyType): string {
   result = result.replace(/(<w:p[^>]*w14:paraId="19CFD271"[^>]*>)([\s\S]*?)(<\/w:p>)/, '$1<w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:t>{solarQty}</w:t></w:r>$3');
   result = result.replace(/(<w:p[^>]*w14:paraId="54C8F9B7"[^>]*>)([\s\S]*?)(<\/w:p>)/, '$1<w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:t>{solarLocation}</w:t></w:r>$3');
   result = result.replace(/(<w:p[^>]*w14:paraId="3D20B1F4"[^>]*>)([\s\S]*?)(<\/w:p>)/, '$1<w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:t>{solarSN}</w:t></w:r>$3');
+  // Solar power status: same fix — consume the full multi-paragraph block.
   result = result.replace(
-    /(<w:p[^>]*w14:paraId="2A57BAA1"[^>]*>)[\s\S]*?(<w:p[^>]*w14:paraId="3A7BCADB"[^>]*>[\s\S]*?<\/w:p>)/,
+    /(<w:p[^>]*w14:paraId="2A57BAA1"[^>]*>)[\s\S]*?<w:p[^>]*w14:paraId="3A7BCADB"[^>]*>[\s\S]*?<\/w:p>/,
     '$1<w:r><w:t>{solarPowerStatus}</w:t></w:r></w:p>'
   );
 

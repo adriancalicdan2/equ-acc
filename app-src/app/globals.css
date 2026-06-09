@@ -29,27 +29,37 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
-/* ── Dark theme (always-on — we default to dark) ── */
+/* ── Navy Blue Theme ── */
 :root {
-  --background: 222 47% 5%;
-  --foreground: 210 40% 98%;
-  --card: 222 47% 8%;
-  --card-foreground: 210 40% 98%;
-  --popover: 222 47% 8%;
-  --popover-foreground: 210 40% 98%;
-  --primary: 214 100% 60%;
-  --primary-foreground: 222 47% 5%;
-  --secondary: 217 33% 17%;
-  --secondary-foreground: 210 40% 98%;
-  --muted: 217 33% 15%;
-  --muted-foreground: 215 20% 55%;
-  --accent: 214 100% 60%;
-  --accent-foreground: 222 47% 5%;
-  --destructive: 0 84% 60%;
-  --destructive-foreground: 210 40% 98%;
-  --border: 217 33% 18%;
-  --input: 217 33% 18%;
-  --ring: 214 100% 60%;
+  /* True navy — dark but clearly blue, not black */
+  --background:         214 50% 10%;   /* deep navy #0d1b2e */
+  --foreground:         210 60% 97%;   /* crisp white */
+
+  --card:               214 48% 15%;   /* #152438  — visible navy card */
+  --card-foreground:    210 60% 97%;
+
+  --popover:            214 48% 15%;
+  --popover-foreground: 210 60% 97%;
+
+  /* Sky-blue primary — clearly visible on navy */
+  --primary:            210 100% 62%;  /* #1e90ff — dodger blue */
+  --primary-foreground: 214 50%  10%;  /* dark navy text on bright blue */
+
+  --secondary:          214 40%  22%;  /* #1c3250 — medium navy */
+  --secondary-foreground: 210 60% 90%;
+
+  --muted:              214 40%  18%;  /* #162840 — input fill */
+  --muted-foreground:   210 30%  60%;  /* muted slate */
+
+  --accent:             210 100% 62%;
+  --accent-foreground:  214 50%  10%;
+
+  --destructive:          0 80%  58%;
+  --destructive-foreground: 210 60% 98%;
+
+  --border:             214 40%  26%;  /* #1e3a5f — visible navy border */
+  --input:              214 40%  26%;
+  --ring:               210 100% 62%;
   --radius: 0.75rem;
 }
 
@@ -60,9 +70,10 @@
   body {
     @apply bg-background text-foreground antialiased;
     font-family: var(--font-inter), sans-serif;
+    /* Visible navy-blue gradient — not too dark */
     background-image:
-      radial-gradient(ellipse at 20% 0%, hsl(214 100% 60% / 0.07) 0%, transparent 60%),
-      radial-gradient(ellipse at 80% 100%, hsl(260 80% 60% / 0.04) 0%, transparent 60%);
+      radial-gradient(ellipse at 20% 0%,   hsl(210 100% 62% / 0.15) 0%, transparent 50%),
+      radial-gradient(ellipse at 80% 100%, hsl(214 80%  40% / 0.20) 0%, transparent 50%);
     background-attachment: fixed;
     min-height: 100vh;
   }
@@ -71,16 +82,18 @@
 /* ── Custom scrollbar ── */
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: hsl(var(--background)); }
-::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: hsl(var(--muted-foreground)); }
+::-webkit-scrollbar-thumb { background: hsl(210 70% 40%); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: hsl(210 100% 62%); }
 
 /* ── Section card hover glow ── */
 .section-card {
   transition: box-shadow 0.3s ease, border-color 0.3s ease;
 }
 .section-card:hover {
-  box-shadow: 0 0 0 1px hsl(var(--primary) / 0.2), 0 8px 32px hsl(var(--primary) / 0.06);
-  border-color: hsl(var(--primary) / 0.3);
+  box-shadow:
+    0 0 0 1px hsl(210 100% 62% / 0.30),
+    0 8px 36px hsl(210 100% 62% / 0.10);
+  border-color: hsl(210 100% 62% / 0.40);
 }
 
 /* ── Photo drop zone ── */
@@ -88,23 +101,26 @@
   transition: background 0.2s ease, border-color 0.2s ease;
 }
 .drop-zone.dragging {
-  background: hsl(var(--primary) / 0.08);
-  border-color: hsl(var(--primary) / 0.6);
+  background: hsl(210 100% 62% / 0.12);
+  border-color: hsl(210 100% 62% / 0.70);
 }
 
-/* ── Fade-in for sections ── */
+/* ── Fade-in animations ── */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
 @keyframes fadeInUp {
   from { opacity: 0; transform: translateY(14px); }
-  to { opacity: 1; transform: translateY(0); }
+  to   { opacity: 1; transform: translateY(0); }
 }
-.animate-fadeInUp {
-  animation: fadeInUp 0.45s ease forwards;
-}
+.animate-fadeIn   { animation: fadeIn   0.6s ease forwards; }
+.animate-fadeInUp { animation: fadeInUp 0.45s ease forwards; }
 
 /* ── Pulse glow for CTA button ── */
 @keyframes pulseGlow {
-  0%, 100% { box-shadow: 0 0 0 0 hsl(var(--primary) / 0); }
-  50% { box-shadow: 0 0 28px 6px hsl(var(--primary) / 0.35); }
+  0%, 100% { box-shadow: 0 0 0   0    hsl(210 100% 62% / 0.00); }
+  50%       { box-shadow: 0 0 36px 10px hsl(210 100% 62% / 0.45); }
 }
 .btn-glow {
   animation: pulseGlow 3s ease-in-out infinite;
