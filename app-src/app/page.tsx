@@ -6,7 +6,7 @@ import { useState, useRef, useEffect } from 'react';
 import { format } from 'date-fns';
 import {
   FileText, Ship, Wifi, Zap, Sun, StickyNote, PenLine,
-  Download, Loader2, CheckCircle2, ChevronRight, AlertCircle,
+  Download, Loader2, CheckCircle2, ChevronRight, AlertCircle, Search,
 } from 'lucide-react';
  
 import { Button } from '@/components/ui/button';
@@ -170,7 +170,33 @@ export default function HomePage() {
 
   const [savedReports, setSavedReports] = useState<any[]>([]);
   const [selectedReportId, setSelectedReportId] = useState<string>('');
+  const [vesselSearchQuery, setVesselSearchQuery] = useState('');
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
+
+  const filteredReports = savedReports.filter((report) =>
+    (report.vesselName || '').toLowerCase().includes(vesselSearchQuery.toLowerCase())
+  );
+
+  // Close dropdown on click outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+        const current = savedReports.find((r) => r.id === selectedReportId);
+        setVesselSearchQuery(current ? current.vesselName : '');
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [selectedReportId, savedReports]);
+
+  // Sync input value with selection changes
+  useEffect(() => {
+    const current = savedReports.find((r) => r.id === selectedReportId);
+    setVesselSearchQuery(current ? current.vesselName : '');
+  }, [selectedReportId, savedReports]);
 
   const checkDuplicateSns = (values: any, excludeDocId?: string): boolean => {
     const sns = getAllSerialNumbers(values);
@@ -734,30 +760,92 @@ export default function HomePage() {
         <div className="bg-card/60 backdrop-blur-xl border border-border/80 rounded-2xl p-5 shadow-lg space-y-4">
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-5">
             {/* Left part: Saved Vessel Dropdown & Management */}
-            <div className="flex-1 space-y-1.5 w-full">
+            <div className="flex-1 space-y-1.5 w-full relative" ref={dropdownRef}>
               <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Select Saved Vessel Info</Label>
-              <div className="flex flex-col sm:flex-row gap-3 w-full">
-                <select
-                  value={selectedReportId || ''}
-                  onChange={(e) => handleSelectReport(e.target.value)}
-                  className={cn('h-10 rounded-lg border px-3 py-2 text-sm bg-muted/40 border-border focus:ring-1 focus:ring-primary/20 flex-1 min-w-[200px]', inputCls)}
-                >
-                  <option value="">{savedReports.length > 0 ? "Choose a vessel..." : "No saved vessels found"}</option>
-                  {savedReports.map((report) => (
-                    <option key={report.id} value={report.id}>
-                      {report.vesselName} {report.installationDate ? `(${report.installationDate})` : ''}
-                    </option>
-                  ))}
-                </select>
+              <div className="flex flex-col sm:flex-row gap-3 w-full items-start sm:items-center">
+                <div className="relative flex-1 min-w-[240px] w-full">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white" />
+                  <input
+                    type="text"
+                    placeholder={savedReports.length > 0 ? "Search/select a vessel..." : "No saved vessels found"}
+                    value={vesselSearchQuery}
+                    onFocus={() => setIsOpen(true)}
+                    onChange={(e) => {
+                      setVesselSearchQuery(e.target.value);
+                      setIsOpen(true);
+                    }}
+                    className={cn(
+                      'h-10 w-full rounded-lg border pl-9 pr-10 py-2 text-sm bg-[hsl(var(--muted))] border-border focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all outline-none text-white'
+                    )}
+                  />
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+                    {vesselSearchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setVesselSearchQuery('');
+                          setSelectedReportId('');
+                          setIsOpen(true);
+                        }}
+                        className="p-0.5 hover:bg-muted rounded text-white hover:text-white/80 transition-colors"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setIsOpen(!isOpen)}
+                      className="p-0.5 hover:bg-muted rounded text-white hover:text-white/80 transition-colors"
+                    >
+                      <svg className={cn("w-4 h-4 transition-transform duration-200", isOpen && "rotate-180")} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                  </div>
+
+                  {/* Dropdown Menu */}
+                  {isOpen && (
+                    <div className="absolute z-50 w-full mt-1.5 bg-[hsl(var(--muted))] border border-border/80 rounded-xl shadow-xl max-h-60 overflow-y-auto backdrop-blur-xl animate-fadeInUp">
+                      {filteredReports.length > 0 ? (
+                        filteredReports.map((report) => (
+                          <button
+                            key={report.id}
+                            type="button"
+                            onClick={() => {
+                              handleSelectReport(report.id);
+                              setVesselSearchQuery(report.vesselName);
+                              setIsOpen(false);
+                            }}
+                            className={cn(
+                              "w-full text-left px-4 py-2 text-sm transition-all flex flex-col gap-0.5 text-white hover:bg-secondary border-l-2 border-transparent hover:border-primary",
+                              selectedReportId === report.id ? "bg-primary/20 border-l-2 border-primary text-primary" : ""
+                            )}
+                          >
+                            <span className="font-medium">{report.vesselName}</span>
+                            {report.installationDate && (
+                              <span className="text-xs text-muted-foreground">{report.installationDate}</span>
+                            )}
+                          </button>
+                        ))
+                      ) : (
+                        <div className="px-4 py-3 text-sm text-muted-foreground text-center">
+                          No vessels found
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
 
                 {selectedReportId && (
-                  <div className="flex gap-2 animate-fadeInUp">
+                  <div className="flex gap-2 animate-fadeInUp w-full sm:w-auto">
                     <Button
                       type="button"
                       variant="outline"
                       onClick={handleUpdateReport}
                       disabled={saving || loading}
-                      className="h-10 px-4 text-xs font-semibold rounded-lg bg-blue-600 border-blue-700 text-white hover:bg-blue-500 hover:shadow-[0_0_14px_rgba(59,130,246,0.5)] active:scale-[0.98] transition-all duration-200"
+                      className="h-10 px-4 text-xs font-semibold rounded-lg bg-blue-600 border-blue-700 text-white hover:bg-blue-500 hover:border-blue-400 hover:shadow-[0_0_14px_rgba(59,130,246,0.5)] active:scale-[0.98] transition-all duration-200 flex-1 sm:flex-none"
                     >
                       Update Selected
                     </Button>
@@ -766,7 +854,7 @@ export default function HomePage() {
                       variant="outline"
                       onClick={handleDeleteReport}
                       disabled={saving || loading}
-                      className="h-10 px-4 text-xs font-semibold rounded-lg bg-red-700 border-red-800 text-white hover:bg-red-600 hover:shadow-[0_0_14px_rgba(239,68,68,0.5)] active:scale-[0.98] transition-all duration-200"
+                      className="h-10 px-4 text-xs font-semibold rounded-lg bg-red-700 border-red-800 text-white hover:bg-red-600 hover:border-red-500 hover:shadow-[0_0_14px_rgba(239,68,68,0.5)] active:scale-[0.98] transition-all duration-200 flex-1 sm:flex-none"
                     >
                       Delete Vessel
                     </Button>
@@ -783,7 +871,7 @@ export default function HomePage() {
                 variant="outline"
                 onClick={handleClear}
                 disabled={loading || saving}
-                className="h-10 px-4 text-xs font-semibold rounded-lg bg-slate-600 border-slate-700 text-white hover:bg-slate-500 hover:text-black hover:shadow-[0_0_10px_rgba(100,116,139,0.4)] active:scale-[0.98] transition-all duration-200 flex items-center justify-center"
+                className="h-10 px-4 text-xs font-semibold rounded-lg bg-slate-600 border-slate-700 text-white hover:bg-slate-500 hover:border-slate-400 hover:shadow-[0_0_10px_rgba(100,116,139,0.4)] active:scale-[0.98] transition-all duration-200 flex items-center justify-center"
               >
                 Clear Form
               </Button>
@@ -795,7 +883,7 @@ export default function HomePage() {
                   variant="outline"
                   onClick={handleSaveNewReport}
                   disabled={loading || saving}
-                  className="h-10 px-4 text-xs font-semibold rounded-lg bg-emerald-600 border-emerald-700 text-white hover:bg-emerald-500 hover:text-black hover:shadow-[0_0_14px_rgba(16,185,129,0.5)] active:scale-[0.98] transition-all duration-200 flex items-center justify-center"
+                  className="h-10 px-4 text-xs font-semibold rounded-lg bg-emerald-600 border-emerald-700 text-white hover:bg-emerald-500 hover:border-emerald-400 hover:shadow-[0_0_14px_rgba(16,185,129,0.5)] active:scale-[0.98] transition-all duration-200 flex items-center justify-center"
                 >
                   {saving ? (
                     <>
