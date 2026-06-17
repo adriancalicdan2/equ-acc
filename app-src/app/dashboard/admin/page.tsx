@@ -60,7 +60,7 @@ export default function AdminPage() {
   const [isSavingSettings, setIsSavingSettings] = useState(false);
 
   // Device filter for serials tab
-  const [deviceFilter, setDeviceFilter] = useState<'all' | 'terminal' | 'nr' | 'sd' | 'fls'>('all');
+  const [deviceFilter, setDeviceFilter] = useState<'all' | 'terminal' | 'nr' | 'sd' | 'vps1.2' | 'sp2.0ar-m' | 'sp2.0ar'>('all');
 
   // Pagination states
   const [vesselPage, setVesselPage] = useState(1);
@@ -156,9 +156,21 @@ export default function AdminPage() {
       if (!raw) return;
       raw.split(',').map(s => s.trim()).forEach(sn => {
         if (sn) {
+          let finalType = type;
+          if (type === 'Fuel Level Sensor (Capacitance)') {
+            finalType = 'Fuel Level Sensor (VPS1.2)';
+          } else if (type === 'Fuel Level Sensor (Floater)') {
+            const digits = sn.replace(/\D/g, '');
+            const num = digits ? parseInt(digits, 10) : 0;
+            if (num % 2 !== 0) {
+              finalType = 'Fuel Level Sensor (SP2.0AR(M))';
+            } else {
+              finalType = 'Fuel Level Sensor (SP2.0AR)';
+            }
+          }
           allSerialNumbers.push({
             sn,
-            type,
+            type: finalType,
             vesselName,
             date,
             engineer,
@@ -185,7 +197,9 @@ export default function AdminPage() {
     if (deviceFilter === 'terminal') return s.type.toLowerCase().includes('(terminal)');
     if (deviceFilter === 'nr') return s.type.toLowerCase().includes('(nr)');
     if (deviceFilter === 'sd') return s.type.toLowerCase().includes('(sd)');
-    if (deviceFilter === 'fls') return s.type.toLowerCase().includes('fuel level sensor');
+    if (deviceFilter === 'vps1.2') return s.type.toLowerCase().includes('vps1.2');
+    if (deviceFilter === 'sp2.0ar-m') return s.type.toLowerCase().includes('sp2.0ar(m)');
+    if (deviceFilter === 'sp2.0ar') return s.type.toLowerCase().includes('sp2.0ar') && !s.type.toLowerCase().includes('sp2.0ar(m)');
     return true;
   });
 
@@ -699,7 +713,9 @@ export default function AdminPage() {
                   <option value="terminal" className="bg-neutral-950">Terminal (Solar)</option>
                   <option value="nr" className="bg-neutral-950">NR (Network)</option>
                   <option value="sd" className="bg-neutral-950">SD (Engine)</option>
-                  <option value="fls" className="bg-neutral-950">FLS (Fuel Sensors)</option>
+                  <option value="vps1.2" className="bg-neutral-950">FLS VPS1.2 (Capacitance)</option>
+                  <option value="sp2.0ar-m" className="bg-neutral-950">FLS SP2.0AR(M) (Floater Odd)</option>
+                  <option value="sp2.0ar" className="bg-neutral-950">FLS SP2.0AR (Floater Even)</option>
                 </select>
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60" />
