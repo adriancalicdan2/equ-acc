@@ -244,7 +244,30 @@ function EquipmentAccountabilityContent() {
     setValue(formKey, next.filter(Boolean).join(', '), { shouldValidate: true });
   };
 
+  const validateOddEvenSns = (values: any): boolean => {
+    const floaterSnsList = (values.flsFloater?.serialNumber || '').split(',').map((s: string) => s.trim()).filter(Boolean);
+    for (let i = 0; i < floaterSnsList.length; i++) {
+      const sn = floaterSnsList[i];
+      const digits = sn.replace(/\D/g, '');
+      if (!digits) continue;
+      const num = parseInt(digits, 10);
+      if (i % 2 === 0) {
+        if (num % 2 === 0) {
+          toast.error(`Serial Number "${sn}" for SP2.0AR(M) (S/N #${i + 1}) must be an ODD number.`);
+          return false;
+        }
+      } else {
+        if (num % 2 !== 0) {
+          toast.error(`Serial Number "${sn}" for SP2.0AR (S/N #${i + 1}) must be an EVEN number.`);
+          return false;
+        }
+      }
+    }
+    return true;
+  };
+
   const checkDuplicateSns = (values: any, excludeDocId?: string): boolean => {
+    if (!validateOddEvenSns(values)) return false;
     const sns = getAllSerialNumbers(values);
     const snValues = sns.map(i => i.sn.toLowerCase());
     const formDuplicates = snValues.filter((item, idx) => snValues.indexOf(item) !== idx);
@@ -648,7 +671,7 @@ function EquipmentAccountabilityContent() {
                 </select>
               </Field>
               <div className="md:col-span-2 lg:col-span-4 space-y-4">
-                <Label className="text-sm font-semibold text-muted-foreground">Tanks & Devices (1 Tank Assigned = 2 S/Ns)</Label>
+                <Label className="text-sm font-semibold text-muted-foreground">Tanks & Devices (1 Tank Assigned = 2 Floaters: SP2.0AR(M) & SP2.0AR)</Label>
                 <div className="grid md:grid-cols-2 gap-4">
                   {Array.from({ length: floaterQty }).map((_, tankIdx) => (
                     <div key={tankIdx} className="grid grid-cols-2 gap-4 p-4 border border-border/60 bg-muted/10 rounded-xl">
@@ -657,11 +680,17 @@ function EquipmentAccountabilityContent() {
                         <Input value={floaterTanks[tankIdx] || ''} onChange={e => handleArrayChange(tankIdx, e.target.value, floaterTanks, setFloaterTanks, 'flsFloater.tankAssigned')} placeholder="e.g. Port Fuel Tank" className={inputCls} />
                         <FieldError name="flsFloater.tankAssigned" errors={errors} />
                       </div>
-                      <div className="space-y-1.5">
-                        <Label className="text-xs font-semibold">Serial Numbers</Label>
-                        <div className="space-y-1.5">
-                          <Input value={floaterSns[tankIdx * 2] || ''} onChange={e => handleSnsChange(tankIdx * 2, e.target.value, floaterSns, setFloaterSns, 'flsFloater.serialNumber')} placeholder={`S/N #${tankIdx * 2 + 1}`} className={inputCls} />
-                          <Input value={floaterSns[tankIdx * 2 + 1] || ''} onChange={e => handleSnsChange(tankIdx * 2 + 1, e.target.value, floaterSns, setFloaterSns, 'flsFloater.serialNumber')} placeholder={`S/N #${tankIdx * 2 + 2}`} className={inputCls} />
+                      <div className="space-y-2">
+                        <Label className="text-xs font-semibold block text-muted-foreground mb-1">Floater Serial Numbers</Label>
+                        <div className="space-y-2">
+                          <div className="space-y-0.5">
+                            <span className="text-[10px] text-primary font-medium block">SP2.0AR(M) S/N (Must be Odd)</span>
+                            <Input value={floaterSns[tankIdx * 2] || ''} onChange={e => handleSnsChange(tankIdx * 2, e.target.value, floaterSns, setFloaterSns, 'flsFloater.serialNumber')} placeholder="e.g. SN1001" className={inputCls} />
+                          </div>
+                          <div className="space-y-0.5">
+                            <span className="text-[10px] text-primary font-medium block">SP2.0AR S/N (Must be Even)</span>
+                            <Input value={floaterSns[tankIdx * 2 + 1] || ''} onChange={e => handleSnsChange(tankIdx * 2 + 1, e.target.value, floaterSns, setFloaterSns, 'flsFloater.serialNumber')} placeholder="e.g. SN1002" className={inputCls} />
+                          </div>
                         </div>
                         <FieldError name="flsFloater.serialNumber" errors={errors} />
                       </div>
