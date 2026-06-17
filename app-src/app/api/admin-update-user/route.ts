@@ -8,8 +8,13 @@ import fs from 'fs';
 // Initialize Firebase Admin SDK
 if (!getApps().length) {
   try {
-    const serviceAccountPath = path.join(process.cwd(), 'service-account.json');
-    const serviceAccount = JSON.parse(fs.readFileSync(serviceAccountPath, 'utf8'));
+    let serviceAccount: any;
+    if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+      serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+    } else {
+      const serviceAccountPath = path.join(process.cwd(), 'service-account.json');
+      serviceAccount = JSON.parse(fs.readFileSync(serviceAccountPath, 'utf8'));
+    }
 
     initializeApp({
       credential: cert(serviceAccount),
