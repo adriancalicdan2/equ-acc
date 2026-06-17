@@ -182,6 +182,37 @@ export default function InventoryControlPage() {
     return () => unsubscribe();
   }, [user]);
 
+  // Automatically sync baseline arrivals for pre-existing deployed items to make available stock = 0
+  useEffect(() => {
+    if (vesselReports.length === 0 || inventory.length === 0) return;
+    
+    const syncBaselines = async () => {
+      for (const item of inventory) {
+        const totalArrivals = (item.arrivalsLog || []).reduce((sum: number, entry: any) => sum + (entry.qty || 0), 0);
+        if (totalArrivals === 0) {
+          const deployedCount = getDeployedCount(item.id);
+          if (deployedCount > 0) {
+            try {
+              await setDoc(doc(firestore, 'inventory', item.id), {
+                arrivalsLog: [{
+                  qty: deployedCount,
+                  type: 'New Arrival' as const,
+                  source: 'Baseline Deployed Stock',
+                  date: format(new Date(), 'yyyy-MM-dd')
+                }]
+              }, { merge: true });
+              console.log(`Auto-seeded baseline stock of ${deployedCount} for ${item.name}`);
+            } catch (err) {
+              console.error(`Failed to auto-seed baseline stock for ${item.id}:`, err);
+            }
+          }
+        }
+      }
+    };
+    
+    syncBaselines();
+  }, [vesselReports, inventory]);
+
   // Deployed hardware counts calculated dynamically from vessel reports
   const getDeployedCount = (itemId: string): number => {
     let count = 0;
