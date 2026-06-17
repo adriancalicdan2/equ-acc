@@ -550,7 +550,7 @@ function PettyCashContent() {
       </form>
 
       <footer className="border-t border-border py-6 text-center text-xs text-muted-foreground/50">
-        Petty Cash Report Generator · AIMF Tech. Corp. ©{new Date().getFullYear()}
+        Petty Cash Report · AIMF Tech. Corp. ©{new Date().getFullYear()}
       </footer>
     </div>
   );

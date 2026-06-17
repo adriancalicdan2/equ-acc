@@ -25,7 +25,7 @@ interface DeploymentRecord {
 
 export default function InventoryControlPage() {
   const router = useRouter();
-  const { user, isAdmin, allowedViews, loading } = useAuth();
+  const { user, displayName, isAdmin, allowedViews, loading } = useAuth();
 
   // Inventory list and detail overlays states
   const [inventory, setInventory] = useState<any[]>([]);
@@ -200,7 +200,8 @@ export default function InventoryControlPage() {
                 qty: targetArrivals,
                 type: 'New Arrival' as const,
                 source: 'Baseline Deployed Stock',
-                date: format(new Date(), 'yyyy-MM-dd')
+                date: format(new Date(), 'yyyy-MM-dd'),
+                loggedBy: 'System Sync'
               }]
             }, { merge: true });
             console.log(`Auto-adjusted stock to make available 0 for ${item.name}: set arrivals to ${targetArrivals}`);
@@ -303,7 +304,8 @@ export default function InventoryControlPage() {
         qty,
         type: arrivalType,
         source: arrivalSource.trim() || 'Not specified',
-        date: arrivalDate
+        date: arrivalDate,
+        loggedBy: displayName || user?.email || 'System'
       };
       const currentArrivals = selectedInventoryItem.arrivalsLog || [];
       const updatedArrivals = [...currentArrivals, newArrival];
@@ -341,7 +343,8 @@ export default function InventoryControlPage() {
       const newDefective = {
         qty,
         remarks: defectiveRemarks.trim() || 'No remarks',
-        date: defectiveDate
+        date: defectiveDate,
+        loggedBy: displayName || user?.email || 'System'
       };
       const currentDefective = selectedInventoryItem.defectiveLog || [];
       const updatedDefective = [...currentDefective, newDefective];
@@ -381,7 +384,8 @@ export default function InventoryControlPage() {
         qty: initialQty,
         type: 'New Arrival' as const,
         source: customItemInitialSource.trim() || 'Initial Setup',
-        date: format(new Date(), 'yyyy-MM-dd')
+        date: format(new Date(), 'yyyy-MM-dd'),
+        loggedBy: displayName || user?.email || 'System'
       }] : [];
       
       await setDoc(doc(firestore, 'inventory', id), {
@@ -733,6 +737,7 @@ export default function InventoryControlPage() {
                             <th className="px-4 py-2.5">Date</th>
                             <th className="px-4 py-2.5">Supplier / Source</th>
                             <th className="px-4 py-2.5">Type</th>
+                            <th className="px-4 py-2.5">Logged By</th>
                             <th className="px-4 py-2.5 text-center">Qty Logged</th>
                           </>
                         )}
@@ -740,6 +745,7 @@ export default function InventoryControlPage() {
                           <>
                             <th className="px-4 py-2.5">Date</th>
                             <th className="px-4 py-2.5">Discovery Remarks</th>
+                            <th className="px-4 py-2.5">Logged By</th>
                             <th className="px-4 py-2.5 text-center">Qty Defective</th>
                           </>
                         )}
@@ -762,6 +768,7 @@ export default function InventoryControlPage() {
                                 <td className="px-4 py-2.5 text-muted-foreground">{log.date}</td>
                                 <td className="px-4 py-2.5 font-semibold text-foreground">{log.source}</td>
                                 <td className="px-4 py-2.5 text-muted-foreground">{log.type}</td>
+                                <td className="px-4 py-2.5 text-muted-foreground">{log.loggedBy || '—'}</td>
                                 <td className="px-4 py-2.5 text-center"><Badge variant="outline" className="border-emerald-500/20 text-emerald-400 bg-emerald-500/5">{log.qty} units</Badge></td>
                               </>
                             )}
@@ -769,6 +776,7 @@ export default function InventoryControlPage() {
                               <>
                                 <td className="px-4 py-2.5 text-muted-foreground">{log.date}</td>
                                 <td className="px-4 py-2.5 text-foreground max-w-[240px] truncate" title={log.remarks}>{log.remarks}</td>
+                                <td className="px-4 py-2.5 text-muted-foreground">{log.loggedBy || '—'}</td>
                                 <td className="px-4 py-2.5 text-center"><Badge variant="outline" className="border-red-500/20 text-red-400 bg-red-500/5">{log.qty} units</Badge></td>
                               </>
                             )}
@@ -776,7 +784,7 @@ export default function InventoryControlPage() {
                         ))
                       ) : (
                         <tr>
-                          <td colSpan={4} className="text-center py-10 text-muted-foreground">No ledger logs recorded for this tab</td>
+                          <td colSpan={5} className="text-center py-10 text-muted-foreground">No ledger logs recorded for this tab</td>
                         </tr>
                       )}
                     </tbody>

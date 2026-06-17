@@ -68,7 +68,7 @@ export default function LoginPage() {
             <FileText className="w-8 h-8 text-primary" />
           </div>
           <h1 className="text-2xl font-bold text-foreground mb-1">Welcome back</h1>
-          <p className="text-sm text-muted-foreground">AIMF Tech. Corp. · Report Generator</p>
+          <p className="text-sm text-muted-foreground">AIMF Tech. Corp. · Report</p>
         </div>
 
         {/* Error */}
@@ -144,7 +144,7 @@ export default function LoginPage() {
         </form>
 
         <p className="text-center text-xs text-muted-foreground/40 mt-8">
-          Equipment Accountability Report Generator · AIMF Tech. Corp. ©{new Date().getFullYear()}
+          Equipment Accountability Report · AIMF Tech. Corp. ©{new Date().getFullYear()}
         </p>
       </div>
     </div>

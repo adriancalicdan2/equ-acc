@@ -56,7 +56,7 @@ export default function Sidebar() {
         </div>
         <div className="min-w-0">
           <p className="font-bold text-sm leading-tight truncate">AIMF Tech. Corp.</p>
-          <p className="text-[11px] text-muted-foreground truncate">Report Generator</p>
+          <p className="text-[11px] text-muted-foreground truncate">Report</p>
         </div>
       </div>
 

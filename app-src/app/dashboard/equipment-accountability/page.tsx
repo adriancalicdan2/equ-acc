@@ -784,7 +784,7 @@ function EquipmentAccountabilityContent() {
       </form>
 
       <footer className="border-t border-border py-6 text-center text-xs text-muted-foreground/50">
-        Equipment Accountability Report Generator · AIMF Tech. Corp. ©{new Date().getFullYear()}
+        Equipment Accountability Report · AIMF Tech. Corp. ©{new Date().getFullYear()}
       </footer>
     </div>
   );
