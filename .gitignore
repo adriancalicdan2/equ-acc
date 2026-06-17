@@ -7,3 +7,7 @@ app-src/.env.local
 # Ignore locally extracted/generated docx files (optional, but good practice)
 docx_extracted/
 *.docx
+
+# Scratch and plan files
+app-src/scratch/
+implementation_plan.md

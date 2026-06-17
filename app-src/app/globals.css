@@ -5,24 +5,24 @@
 
 @theme inline {
   --font-sans: var(--font-inter);
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-popover: var(--popover);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-destructive: var(--destructive);
-  --color-border: var(--border);
-  --color-input: var(--input);
-  --color-ring: var(--ring);
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -32,34 +32,43 @@
 /* ── Navy Blue Theme ── */
 :root {
   /* True navy — dark but clearly blue, not black */
-  --background:         214 50% 10%;   /* deep navy #0d1b2e */
-  --foreground:         210 60% 97%;   /* crisp white */
+  --background: 214 50% 10%;
+  /* deep navy #0d1b2e */
+  --foreground: 210 60% 97%;
+  /* crisp white */
 
-  --card:               214 48% 15%;   /* #152438  — visible navy card */
-  --card-foreground:    210 60% 97%;
+  --card: 214 48% 15%;
+  /* #152438  — visible navy card */
+  --card-foreground: 210 60% 97%;
 
-  --popover:            214 48% 15%;
+  --popover: 214 48% 15%;
   --popover-foreground: 210 60% 97%;
 
   /* Sky-blue primary — clearly visible on navy */
-  --primary:            210 100% 62%;  /* #1e90ff — dodger blue */
-  --primary-foreground: 214 50%  10%;  /* dark navy text on bright blue */
+  --primary: 210 100% 62%;
+  /* #1e90ff — dodger blue */
+  --primary-foreground: 214 50% 10%;
+  /* dark navy text on bright blue */
 
-  --secondary:          214 40%  22%;  /* #1c3250 — medium navy */
+  --secondary: 214 40% 22%;
+  /* #1c3250 — medium navy */
   --secondary-foreground: 210 60% 90%;
 
-  --muted:              214 40%  18%;  /* #162840 — input fill */
-  --muted-foreground:   210 30%  60%;  /* muted slate */
+  --muted: 214 40% 18%;
+  /* #162840 — input fill */
+  --muted-foreground: 210 30% 60%;
+  /* muted slate */
 
-  --accent:             210 100% 62%;
-  --accent-foreground:  214 50%  10%;
+  --accent: 210 100% 62%;
+  --accent-foreground: 214 50% 10%;
 
-  --destructive:          0 80%  58%;
+  --destructive: 0 80% 58%;
   --destructive-foreground: 210 60% 98%;
 
-  --border:             214 40%  26%;  /* #1e3a5f — visible navy border */
-  --input:              214 40%  26%;
-  --ring:               210 100% 62%;
+  --border: 214 40% 26%;
+  /* #1e3a5f — visible navy border */
+  --input: 214 40% 26%;
+  --ring: 210 100% 62%;
   --radius: 0.75rem;
 }
 
@@ -67,28 +76,42 @@
   * {
     @apply border-border box-border;
   }
+
   body {
     @apply bg-background text-foreground antialiased;
     font-family: var(--font-inter), sans-serif;
     /* Visible navy-blue gradient — not too dark */
     background-image:
-      radial-gradient(ellipse at 20% 0%,   hsl(210 100% 62% / 0.15) 0%, transparent 50%),
-      radial-gradient(ellipse at 80% 100%, hsl(214 80%  40% / 0.20) 0%, transparent 50%);
+      radial-gradient(ellipse at 20% 0%, hsl(210 100% 62% / 0.15) 0%, transparent 50%),
+      radial-gradient(ellipse at 80% 100%, hsl(214 80% 40% / 0.20) 0%, transparent 50%);
     background-attachment: fixed;
     min-height: 100vh;
   }
 }
 
 /* ── Custom scrollbar ── */
-::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: hsl(var(--background)); }
-::-webkit-scrollbar-thumb { background: hsl(210 70% 40%); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: hsl(210 100% 62%); }
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: hsl(var(--background));
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(210 70% 40%);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(210 100% 62%);
+}
 
 /* ── Section card hover glow ── */
 .section-card {
   transition: box-shadow 0.3s ease, border-color 0.3s ease;
 }
+
 .section-card:hover {
   box-shadow:
     0 0 0 1px hsl(210 100% 62% / 0.30),
@@ -100,6 +123,7 @@
 .drop-zone {
   transition: background 0.2s ease, border-color 0.2s ease;
 }
+
 .drop-zone.dragging {
   background: hsl(210 100% 62% / 0.12);
   border-color: hsl(210 100% 62% / 0.70);
@@ -107,21 +131,48 @@
 
 /* ── Fade-in animations ── */
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to   { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
+
 @keyframes fadeInUp {
-  from { opacity: 0; transform: translateY(14px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
-.animate-fadeIn   { animation: fadeIn   0.6s ease forwards; }
-.animate-fadeInUp { animation: fadeInUp 0.45s ease forwards; }
+
+.animate-fadeIn {
+  animation: fadeIn 0.6s ease forwards;
+}
+
+.animate-fadeInUp {
+  animation: fadeInUp 0.45s ease forwards;
+}
 
 /* ── Pulse glow for CTA button ── */
 @keyframes pulseGlow {
-  0%, 100% { box-shadow: 0 0 0   0    hsl(210 100% 62% / 0.00); }
-  50%       { box-shadow: 0 0 36px 10px hsl(210 100% 62% / 0.45); }
+
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 hsl(210 100% 62% / 0.00);
+  }
+
+  50% {
+    box-shadow: 0 0 36px 10px hsl(210 100% 62% / 0.45);
+  }
 }
+
 .btn-glow {
   animation: pulseGlow 3s ease-in-out infinite;
 }
@@ -131,7 +182,175 @@ select {
   color: hsl(var(--foreground));
   background-color: hsl(var(--muted));
 }
+
 select option {
   background-color: hsl(var(--card));
   color: hsl(var(--foreground));
+}
+
+/* ═══════════════════════════════════════════════════
+   LOGIN PAGE STYLES
+   ═══════════════════════════════════════════════════ */
+
+/* ── Floating gradient orbs ── */
+.login-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.login-orb-1 {
+  width: 400px;
+  height: 400px;
+  background: radial-gradient(circle, hsl(210 100% 62% / 0.6), transparent 70%);
+  top: -100px;
+  left: -100px;
+  animation: orbFloat1 12s ease-in-out infinite;
+}
+
+.login-orb-2 {
+  width: 300px;
+  height: 300px;
+  background: radial-gradient(circle, hsl(260 80% 55% / 0.4), transparent 70%);
+  bottom: -50px;
+  right: -50px;
+  animation: orbFloat2 15s ease-in-out infinite;
+}
+
+.login-orb-3 {
+  width: 200px;
+  height: 200px;
+  background: radial-gradient(circle, hsl(180 70% 50% / 0.3), transparent 70%);
+  top: 50%;
+  left: 60%;
+  animation: orbFloat3 10s ease-in-out infinite;
+}
+
+@keyframes orbFloat1 {
+
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+
+  33% {
+    transform: translate(60px, 30px) scale(1.1);
+  }
+
+  66% {
+    transform: translate(-30px, 60px) scale(0.95);
+  }
+}
+
+@keyframes orbFloat2 {
+
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+
+  50% {
+    transform: translate(-50px, -40px) scale(1.15);
+  }
+}
+
+@keyframes orbFloat3 {
+
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+
+  33% {
+    transform: translate(40px, -50px) scale(1.1);
+  }
+
+  66% {
+    transform: translate(-20px, 30px) scale(0.9);
+  }
+}
+
+/* ── Glassmorphism card ── */
+.login-card {
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: 1px solid hsl(210 80% 70% / 0.25);
+  border-radius: 1.5rem;
+  padding: 2.5rem;
+  box-shadow: none;
+}
+
+/* ── Logo glow ── */
+.login-logo-glow {
+  box-shadow: 0 0 30px hsl(210 100% 62% / 0.25);
+  animation: logoGlow 4s ease-in-out infinite alternate;
+}
+
+@keyframes logoGlow {
+  from {
+    box-shadow: 0 0 20px hsl(210 100% 62% / 0.15);
+  }
+
+  to {
+    box-shadow: 0 0 40px hsl(210 100% 62% / 0.35);
+  }
+}
+
+/* ── Login form inputs ── */
+.login-input {
+  background: transparent;
+  border: 1px solid hsl(214 40% 35%);
+  color: hsl(var(--foreground));
+  outline: none;
+  transition: all 0.25s ease;
+}
+
+.login-input::placeholder {
+  color: #64748b;
+}
+
+.login-input:focus {
+  border-color: hsl(210 100% 62% / 0.6);
+  box-shadow: 0 0 0 3px hsl(210 100% 62% / 0.12);
+}
+
+/* ── Submit button ── */
+.login-submit {
+  background: linear-gradient(135deg, hsl(210 100% 55%), hsl(220 90% 50%));
+  color: white;
+  border: 1px solid hsl(210 100% 62% / 0.3);
+  box-shadow: 0 4px 20px hsl(210 100% 50% / 0.3);
+}
+
+.login-submit:hover:not(:disabled) {
+  background: linear-gradient(135deg, hsl(210 100% 60%), hsl(220 90% 55%));
+  box-shadow: 0 6px 30px hsl(210 100% 50% / 0.45);
+  transform: translateY(-1px);
+}
+
+.login-submit:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 2px 10px hsl(210 100% 50% / 0.3);
+}
+
+/* ── Google button ── */
+.login-google {
+  background: transparent;
+  border: 1px solid hsl(214 40% 35%);
+  color: hsl(210 60% 93%);
+  transition: all 0.25s ease;
+}
+
+.login-google:hover:not(:disabled) {
+  background: hsl(214 40% 22% / 0.8);
+  border-color: hsl(210 60% 40%);
+  box-shadow: 0 4px 16px hsl(214 50% 10% / 0.4);
+  transform: translateY(-1px);
+}
+
+.login-google:active:not(:disabled) {
+  transform: translateY(0);
 }
