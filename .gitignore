@@ -3,6 +3,7 @@ equipment-accountability-*.json
 *.json.local
 .env.local
 app-src/.env.local
+app-src/service-account.json
 
 # Ignore locally extracted/generated docx files (optional, but good practice)
 docx_extracted/

@@ -48,9 +48,14 @@ export default function AdminPage() {
   const [newEmpRestDays, setNewEmpRestDays] = useState<number[]>([0, 6]); // 0=Sun,6=Sat
   const [isSubmittingEmp, setIsSubmittingEmp] = useState(false);
 
-  // Edit Employee Settings Modal
+  // Edit Employee Modal States
   const [showEditSettingsModal, setShowEditSettingsModal] = useState(false);
   const [editEmp, setEditEmp] = useState<any | null>(null);
+  const [editEmpEmail, setEditEmpEmail] = useState('');
+  const [editEmpName, setEditEmpName] = useState('');
+  const [editEmpPassword, setEditEmpPassword] = useState('');
+  const [editEmpRole, setEditEmpRole] = useState<'admin' | 'user'>('user');
+  const [editEmpAllowedViews, setEditEmpAllowedViews] = useState<string[]>(['equipment-accountability', 'petty-cash']);
   const [editShiftHours, setEditShiftHours] = useState<number>(10);
   const [editRestDays, setEditRestDays] = useState<number[]>([0, 6]);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
@@ -430,13 +435,34 @@ export default function AdminPage() {
 
   const handleSaveEmpSettings = async () => {
     if (!editEmp) return;
+    if (!editEmpEmail) { toast.error('Email is required'); return; }
+    if (editEmpPassword && editEmpPassword.length < 6) {
+      toast.error('Password must be at least 6 characters long');
+      return;
+    }
     setIsSavingSettings(true);
     try {
-      await setDoc(doc(firestore, 'users', editEmp.id), {
-        shiftHours: editShiftHours,
-        restDays: editRestDays,
-      }, { merge: true });
-      toast.success(`Settings updated for ${editEmp.displayName || editEmp.email}`);
+      const res = await fetch('/api/admin-update-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          uid: editEmp.id,
+          email: editEmpEmail,
+          displayName: editEmpName,
+          role: editEmpRole,
+          allowedViews: editEmpRole === 'admin' ? ['equipment-accountability', 'petty-cash', 'time-card'] : editEmpAllowedViews,
+          shiftHours: editShiftHours,
+          restDays: editRestDays,
+          password: editEmpPassword || undefined,
+        }),
+      });
+
+      if (!res.ok) {
+        const errJson = await res.json();
+        throw new Error(errJson.error || 'Failed to update employee details');
+      }
+
+      toast.success(`Employee details updated for ${editEmpName || editEmpEmail}`);
       setShowEditSettingsModal(false);
     } catch (err: any) {
       toast.error('Failed to save settings: ' + err.message);
@@ -1270,12 +1296,17 @@ export default function AdminPage() {
                             <button
                               onClick={() => {
                                 setEditEmp(emp);
+                                setEditEmpEmail(emp.email || '');
+                                setEditEmpName(emp.displayName || '');
+                                setEditEmpPassword('');
+                                setEditEmpRole(emp.role || 'user');
+                                setEditEmpAllowedViews(emp.allowedViews || ['equipment-accountability', 'petty-cash']);
                                 setEditShiftHours(typeof emp.shiftHours === 'number' ? emp.shiftHours : 10);
                                 setEditRestDays(Array.isArray(emp.restDays) ? emp.restDays : [0, 6]);
                                 setShowEditSettingsModal(true);
                               }}
                               className="p-2 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
-                              title="Edit Shift & Rest Day Settings"
+                              title="Edit Employee Details & Settings"
                             >
                               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
                             </button>
@@ -1338,21 +1369,101 @@ export default function AdminPage() {
         {/* EDIT EMPLOYEE SETTINGS MODAL */}
         {showEditSettingsModal && editEmp && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/30 backdrop-blur-md p-4 animate-fadeIn">
-            <div className="bg-card border border-border rounded-2xl w-full max-w-md p-6 shadow-2xl relative animate-fadeInUp">
+            <div className="bg-card border border-border rounded-2xl w-full max-w-md p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto animate-fadeInUp">
               <button
                 onClick={() => setShowEditSettingsModal(false)}
                 className="absolute top-4 right-4 p-1.5 hover:bg-muted rounded-lg text-muted-foreground hover:text-foreground transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
-              <h3 className="font-bold text-lg text-foreground mb-1">Edit Time Card Settings</h3>
+              <h3 className="font-bold text-lg text-foreground mb-1">Edit Employee Details</h3>
               <p className="text-xs text-muted-foreground mb-5">
-                Employee: <span className="text-primary font-medium">{editEmp.displayName || editEmp.email}</span>
+                Update account details, change passwords, and configure permissions.
               </p>
 
-              <div className="space-y-5">
-                {/* Shift Hours */}
+              <div className="space-y-4">
+                {/* Email Address */}
                 <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Email Address</label>
+                  <input
+                    type="email"
+                    value={editEmpEmail}
+                    onChange={e => setEditEmpEmail(e.target.value)}
+                    className="bg-muted/50 border-border text-white focus:border-primary/50 outline-none text-sm h-10 px-3 w-full rounded-lg border transition-all"
+                    placeholder="email@example.com"
+                  />
+                </div>
+
+                {/* Display Name */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Full Name</label>
+                  <input
+                    type="text"
+                    value={editEmpName}
+                    onChange={e => setEditEmpName(e.target.value)}
+                    className="bg-muted/50 border-border text-white focus:border-primary/50 outline-none text-sm h-10 px-3 w-full rounded-lg border transition-all"
+                    placeholder="e.g. John Doe"
+                  />
+                </div>
+
+                {/* Password reset */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">New Password</label>
+                  <input
+                    type="password"
+                    value={editEmpPassword}
+                    onChange={e => setEditEmpPassword(e.target.value)}
+                    className="bg-muted/50 border-border text-white focus:border-primary/50 outline-none text-sm h-10 px-3 w-full rounded-lg border transition-all"
+                    placeholder="Leave blank to keep current password"
+                  />
+                  <p className="text-[10px] text-muted-foreground">Min 6 characters. Overwrites user password instantly.</p>
+                </div>
+
+                {/* Access Role */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Access Role</label>
+                  <select
+                    value={editEmpRole}
+                    onChange={e => setEditEmpRole(e.target.value as 'admin' | 'user')}
+                    className="bg-muted/50 border-border text-white focus:border-primary/50 outline-none text-sm h-10 px-3 w-full rounded-lg border transition-all appearance-none"
+                  >
+                    <option value="user" className="bg-neutral-900">Standard User</option>
+                    <option value="admin" className="bg-neutral-900">Administrator</option>
+                  </select>
+                </div>
+
+                {/* View Permissions (only for standard users) */}
+                {editEmpRole === 'user' && (
+                  <div className="space-y-1.5 border-t border-border/40 pt-3">
+                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Allowed Views</label>
+                    <div className="flex flex-wrap gap-4 pt-1">
+                      {[
+                        { id: 'equipment-accountability', label: 'Vessel Form' },
+                        { id: 'petty-cash', label: 'Petty Cash' },
+                        { id: 'time-card', label: 'Time Card' },
+                      ].map(v => {
+                        const checked = editEmpAllowedViews.includes(v.id);
+                        return (
+                          <label key={v.id} className="flex items-center gap-1.5 cursor-pointer text-xs text-foreground">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => {
+                                if (checked) setEditEmpAllowedViews(prev => prev.filter(x => x !== v.id));
+                                else setEditEmpAllowedViews(prev => [...prev, v.id]);
+                              }}
+                              className="w-4 h-4 rounded border-neutral-700 accent-primary"
+                            />
+                            {v.label}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Shift Hours */}
+                <div className="space-y-1.5 border-t border-border/40 pt-3">
                   <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Shift Hours (OT Threshold)</label>
                   <div className="flex items-center gap-3">
                     <input
@@ -1368,7 +1479,7 @@ export default function AdminPage() {
                 </div>
 
                 {/* Rest Days */}
-                <div className="space-y-2">
+                <div className="space-y-2 border-t border-border/40 pt-3">
                   <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Rest Days</label>
                   <div className="grid grid-cols-7 gap-2">
                     {[
@@ -1390,7 +1501,7 @@ export default function AdminPage() {
                             else setEditRestDays(prev => [...prev, d.val]);
                           }}
                           className={cn(
-                            'py-2 rounded-lg text-xs font-semibold border transition-all',
+                            'py-2 rounded-lg text-xs font-semibold border transition-all cursor-pointer',
                             checked
                               ? 'bg-primary/15 border-primary/40 text-primary'
                               : 'bg-muted/40 border-border/60 text-muted-foreground hover:bg-muted/70'
@@ -1408,7 +1519,7 @@ export default function AdminPage() {
               <div className="flex justify-end gap-2 pt-5 border-t border-border/40 mt-5">
                 <Button type="button" variant="outline" onClick={() => setShowEditSettingsModal(false)} className="h-10 text-xs border-border hover:bg-muted text-foreground bg-transparent">Cancel</Button>
                 <Button onClick={handleSaveEmpSettings} disabled={isSavingSettings} className="h-10 text-xs bg-primary text-primary-foreground">
-                  {isSavingSettings ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Save Settings'}
+                  {isSavingSettings ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Save Employee'}
                 </Button>
               </div>
             </div>
