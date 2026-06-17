@@ -9,7 +9,7 @@ import { useAuth } from '@/lib/firebase/AuthContext';
 import { collection, onSnapshot, query, orderBy, doc, deleteDoc, setDoc } from 'firebase/firestore';
 import { 
   ShieldCheck, FileText, Wallet, Search, Trash2, ExternalLink, Download, 
-  Loader2, BadgeAlert, Database, Calendar, User, Briefcase, Plus, Users, X
+  Loader2, BadgeAlert, Database, Calendar, User, Plus, Users, X
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,7 +18,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 
-type Tab = 'vessels' | 'petty-cash' | 'serials' | 'employees' | 'inventory';
+type Tab = 'vessels' | 'petty-cash' | 'serials' | 'employees';
 
 
 export default function AdminPage() {
@@ -33,7 +33,6 @@ export default function AdminPage() {
   const [pettySearch, setPettySearch] = useState('');
   const [serialSearch, setSerialSearch] = useState('');
   const [employeeSearch, setEmployeeSearch] = useState('');
-  const [inventorySearch, setInventorySearch] = useState('');
 
   const [loadingPC, setLoadingPC] = useState<string | null>(null);
 
@@ -59,37 +58,6 @@ export default function AdminPage() {
   const [editShiftHours, setEditShiftHours] = useState<number>(10);
   const [editRestDays, setEditRestDays] = useState<number[]>([0, 6]);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
-
-  // Inventory list and detail overlays states
-  const [inventory, setInventory] = useState<any[]>([]);
-  const [selectedInventoryItem, setSelectedInventoryItem] = useState<any | null>(null);
-  const [showArrivalModal, setShowArrivalModal] = useState(false);
-  const [showDefectiveModal, setShowDefectiveModal] = useState(false);
-  const [showDetailModal, setShowDetailModal] = useState(false);
-  const [showAddCustomItemModal, setShowAddCustomItemModal] = useState(false);
-  const [isSubmittingInventory, setIsSubmittingInventory] = useState(false);
-
-  // Form states for Logging Stock Arrival
-  const [arrivalQty, setArrivalQty] = useState('1');
-  const [arrivalType, setArrivalType] = useState<'New Arrival' | 'Found Item'>('New Arrival');
-  const [arrivalSource, setArrivalSource] = useState('');
-  const [arrivalDate, setArrivalDate] = useState(format(new Date(), 'yyyy-MM-dd'));
-
-  // Form states for Marking Defective
-  const [defectiveQty, setDefectiveQty] = useState('1');
-  const [defectiveRemarks, setDefectiveRemarks] = useState('');
-  const [defectiveDate, setDefectiveDate] = useState(format(new Date(), 'yyyy-MM-dd'));
-
-  // Form states for Custom Item
-  const [customItemName, setCustomItemName] = useState('');
-  const [customItemCode, setCustomItemCode] = useState('');
-  const [customItemCategory, setCustomItemCategory] = useState<'device' | 'bracket'>('device');
-  const [customItemInitialStock, setCustomItemInitialStock] = useState('0');
-  const [customItemInitialSource, setCustomItemInitialSource] = useState('Initial Setup');
-
-  // Inventory logs detail modal tabs & pages
-  const [detailActiveTab, setDetailActiveTab] = useState<'deployments' | 'arrivals' | 'defective'>('deployments');
-  const [detailPage, setDetailPage] = useState(1);
 
   // Device filter for serials tab
   const [deviceFilter, setDeviceFilter] = useState<'all' | 'terminal' | 'nr' | 'sd' | 'fls'>('all');
@@ -163,79 +131,6 @@ export default function AdminPage() {
     }, (error) => console.error('Error listening to users:', error));
     return () => unsubscribe();
   }, []);
-
-  // Subscribe to inventory collection and initialize defaults if empty
-  useEffect(() => {
-    const q = query(collection(firestore, 'inventory'), orderBy('name', 'asc'));
-    const unsubscribe = onSnapshot(q, async (snapshot) => {
-      const docs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-      
-      if (docs.length === 0) {
-        const defaultItems = [
-          { id: 'terminal', name: 'Solar Terminal', deviceCode: 'Solar Panel Terminal', category: 'device', arrivalsLog: [], defectiveLog: [] },
-          { id: 'nr', name: 'NR (Network Transmitter)', deviceCode: 'Wireless Network Transmitter', category: 'device', arrivalsLog: [], defectiveLog: [] },
-          { id: 'sd', name: 'SD (Engine Hours Monitor)', deviceCode: 'Working Hours Engine Monitor', category: 'device', arrivalsLog: [], defectiveLog: [] },
-          { id: 'fls-floater', name: 'FLS Floater', deviceCode: 'SP2.0AR / SP2.0AR(M)', category: 'device', arrivalsLog: [], defectiveLog: [] },
-          { id: 'fls-capacitance', name: 'FLS Capacitance', deviceCode: 'VPS1.2', category: 'device', arrivalsLog: [], defectiveLog: [] },
-          { id: 'bracket-terminal', name: 'Terminal bracket', deviceCode: 'Solar Terminal Bracket', category: 'bracket', arrivalsLog: [], defectiveLog: [] },
-          { id: 'bracket-sd', name: 'SD bracket', deviceCode: 'Engine Hours Monitor Bracket', category: 'bracket', arrivalsLog: [], defectiveLog: [] },
-          { id: 'bracket-nr', name: 'NR bracket', deviceCode: 'Network Transmitter Bracket', category: 'bracket', arrivalsLog: [], defectiveLog: [] },
-          { id: 'bracket-sp2', name: 'SP2.0 Bracket', deviceCode: 'FLS Floater Bracket', category: 'bracket', arrivalsLog: [], defectiveLog: [] }
-        ];
-        
-        for (const item of defaultItems) {
-          try {
-            await setDoc(doc(firestore, 'inventory', item.id), {
-              name: item.name,
-              deviceCode: item.deviceCode,
-              category: item.category,
-              arrivalsLog: item.arrivalsLog,
-              defectiveLog: item.defectiveLog,
-              createdAt: new Date()
-            });
-          } catch (err) {
-            console.error('Failed to initialize default item:', item.id, err);
-          }
-        }
-      } else {
-        setInventory(docs);
-      }
-    }, (error) => console.error('Error listening to inventory:', error));
-    return () => unsubscribe();
-  }, []);
-
-  // Automatically sync baseline arrivals for pre-existing deployed items to make available stock = 0
-  useEffect(() => {
-    if (vesselReports.length === 0 || inventory.length === 0) return;
-    
-    const syncBaselines = async () => {
-      for (const item of inventory) {
-        const totalArrivals = (item.arrivalsLog || []).reduce((sum: number, entry: any) => sum + (entry.qty || 0), 0);
-        if (totalArrivals === 0) {
-          const deployedCount = getDeployedCount(item.id);
-          if (deployedCount > 0) {
-            try {
-              const baselineArrival = {
-                qty: deployedCount,
-                type: 'New Arrival' as const,
-                source: 'Baseline Deployed Stock',
-                date: format(new Date(), 'yyyy-MM-dd')
-              };
-              await setDoc(doc(firestore, 'inventory', item.id), {
-                arrivalsLog: [baselineArrival]
-              }, { merge: true });
-              console.log(`Auto-seeded baseline stock of ${deployedCount} for ${item.name}`);
-            } catch (err) {
-              console.error(`Failed to auto-seed baseline stock for ${item.id}:`, err);
-            }
-          }
-        }
-      }
-    };
-    
-    syncBaselines();
-  }, [vesselReports, inventory]);
-
 
   // Filter vessel reports
 
@@ -498,153 +393,6 @@ export default function AdminPage() {
     reportId: string;
   }
 
-  const getDeploymentHistory = (itemId: string): DeploymentRecord[] => {
-    const history: DeploymentRecord[] = [];
-    vesselReports.forEach(report => {
-      let qty = 0;
-      if (itemId === 'terminal' || itemId === 'bracket-terminal') {
-        qty = parseInt(report.solar?.qty || '0', 10) || 0;
-      } else if (itemId === 'nr' || itemId === 'bracket-nr') {
-        qty = parseInt(report.network?.qty || '0', 10) || 0;
-      } else if (itemId === 'sd' || itemId === 'bracket-sd') {
-        qty = parseInt(report.engine?.qty || '0', 10) || 0;
-      } else if (itemId === 'fls-floater' || itemId === 'bracket-sp2') {
-        qty = parseInt(report.flsFloater?.qty || '0', 10) || 0;
-      } else if (itemId === 'fls-capacitance') {
-        qty = parseInt(report.flsCapacitance?.qty || '0', 10) || 0;
-      }
-      
-      if (qty > 0) {
-        history.push({
-          vesselName: report.vesselInfo?.vesselName || 'Unnamed Vessel',
-          date: report.vesselInfo?.installationDate || '',
-          engineer: report.vesselInfo?.leadEngineer || '',
-          qty,
-          reportId: report.id
-        });
-      }
-    });
-    return history;
-  };
-
-  // Log Arrival Submit Handler
-  const handleAddArrival = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedInventoryItem) return;
-    const qty = parseInt(arrivalQty, 10);
-    if (isNaN(qty) || qty <= 0) { toast.error('Quantity must be a positive number'); return; }
-    
-    setIsSubmittingInventory(true);
-    try {
-      const newArrival = {
-        qty,
-        type: arrivalType,
-        source: arrivalSource.trim() || 'Not specified',
-        date: arrivalDate
-      };
-      const currentArrivals = selectedInventoryItem.arrivalsLog || [];
-      const updatedArrivals = [...currentArrivals, newArrival];
-      
-      await setDoc(doc(firestore, 'inventory', selectedInventoryItem.id), {
-        arrivalsLog: updatedArrivals
-      }, { merge: true });
-      
-      toast.success(`Logged arrival of ${qty} units successfully!`);
-      
-      // Update local state copy to prevent rendering delays in modals
-      setSelectedInventoryItem((prev: any) => ({
-        ...prev,
-        arrivalsLog: updatedArrivals
-      }));
-      
-      setShowArrivalModal(false);
-      setArrivalQty('1');
-      setArrivalSource('');
-    } catch (err: any) {
-      toast.error('Failed to log arrival: ' + err.message);
-    } finally {
-      setIsSubmittingInventory(false);
-    }
-  };
-
-  // Report Defective Submit Handler
-  const handleAddDefective = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedInventoryItem) return;
-    const qty = parseInt(defectiveQty, 10);
-    if (isNaN(qty) || qty <= 0) { toast.error('Quantity must be a positive number'); return; }
-    
-    setIsSubmittingInventory(true);
-    try {
-      const newDefective = {
-        qty,
-        remarks: defectiveRemarks.trim() || 'No remarks',
-        date: defectiveDate
-      };
-      const currentDefective = selectedInventoryItem.defectiveLog || [];
-      const updatedDefective = [...currentDefective, newDefective];
-      
-      await setDoc(doc(firestore, 'inventory', selectedInventoryItem.id), {
-        defectiveLog: updatedDefective
-      }, { merge: true });
-      
-      toast.success(`Logged ${qty} defective units successfully!`);
-      
-      // Update local state copy to prevent rendering delays in modals
-      setSelectedInventoryItem((prev: any) => ({
-        ...prev,
-        defectiveLog: updatedDefective
-      }));
-      
-      setShowDefectiveModal(false);
-      setDefectiveQty('1');
-      setDefectiveRemarks('');
-    } catch (err: any) {
-      toast.error('Failed to log defective item: ' + err.message);
-    } finally {
-      setIsSubmittingInventory(false);
-    }
-  };
-
-  // Create Custom Item Handler
-  const handleAddCustomItem = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!customItemName.trim()) { toast.error('Item Name is required'); return; }
-    const name = customItemName.trim();
-    const id = name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-    const initialQty = parseInt(customItemInitialStock, 10) || 0;
-    
-    setIsSubmittingInventory(true);
-    try {
-      const arrivalsLog = initialQty > 0 ? [{
-        qty: initialQty,
-        type: 'New Arrival' as const,
-        source: customItemInitialSource.trim() || 'Initial Setup',
-        date: format(new Date(), 'yyyy-MM-dd')
-      }] : [];
-      
-      await setDoc(doc(firestore, 'inventory', id), {
-        name,
-        deviceCode: customItemCode.trim() || name,
-        category: customItemCategory,
-        arrivalsLog,
-        defectiveLog: [],
-        createdAt: new Date()
-      });
-      
-      toast.success(`Custom item "${name}" created successfully!`);
-      setShowAddCustomItemModal(false);
-      setCustomItemName('');
-      setCustomItemCode('');
-      setCustomItemInitialStock('0');
-    } catch (err: any) {
-      toast.error('Failed to create custom item: ' + err.message);
-    } finally {
-      setIsSubmittingInventory(false);
-    }
-  };
-
-
   const filteredEmployees = employees.filter(emp => 
     (emp.email || '').toLowerCase().includes(employeeSearch.toLowerCase()) ||
     (emp.displayName || '').toLowerCase().includes(employeeSearch.toLowerCase())
@@ -685,7 +433,6 @@ export default function AdminPage() {
             { id: 'vessels', label: 'Accountability Reports', icon: FileText },
             { id: 'petty-cash', label: 'Petty Cash Reports', icon: Wallet },
             { id: 'serials', label: 'Serial Registry', icon: Database },
-            { id: 'inventory', label: 'Inventory Control', icon: Briefcase },
             { id: 'employees', label: 'Employee Directory', icon: Users },
           ].map((tab) => {
             const Icon = tab.icon;
@@ -1144,6 +891,21 @@ export default function AdminPage() {
                           />
                           Equipment Accountability
                         </label>
+                         <label className="flex items-center gap-2.5 text-xs text-foreground cursor-pointer select-none">
+                          <input 
+                            type="checkbox"
+                            checked={newEmpAllowedViews.includes('inventory')}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setNewEmpAllowedViews([...newEmpAllowedViews, 'inventory']);
+                              } else {
+                                setNewEmpAllowedViews(newEmpAllowedViews.filter(v => v !== 'inventory'));
+                              }
+                            }}
+                            className="w-4 h-4 rounded border-border bg-muted/50 text-primary accent-primary"
+                          />
+                          Inventory Control
+                        </label>
                         <label className="flex items-center gap-2.5 text-xs text-foreground cursor-pointer select-none">
                           <input 
                             type="checkbox"
@@ -1269,6 +1031,15 @@ export default function AdminPage() {
                                   className="w-3.5 h-3.5 rounded border-neutral-700 accent-primary"
                                 />
                                 Vessel
+                              </label>
+                              <label className="flex items-center gap-1.5 cursor-pointer text-[11px]">
+                                <input 
+                                  type="checkbox"
+                                  checked={(emp.allowedViews || []).includes('inventory')}
+                                  onChange={() => handleToggleViewPermission(emp.id, 'inventory', emp.allowedViews || [])}
+                                  className="w-3.5 h-3.5 rounded border-neutral-700 accent-primary"
+                                />
+                                Inventory
                               </label>
                               <label className="flex items-center gap-1.5 cursor-pointer text-[11px]">
                                 <input 
@@ -1439,6 +1210,7 @@ export default function AdminPage() {
                     <div className="flex flex-wrap gap-4 pt-1">
                       {[
                         { id: 'equipment-accountability', label: 'Vessel Form' },
+                        { id: 'inventory', label: 'Inventory Control' },
                         { id: 'petty-cash', label: 'Petty Cash' },
                         { id: 'time-card', label: 'Time Card' },
                       ].map(v => {
@@ -1521,537 +1293,6 @@ export default function AdminPage() {
                 <Button onClick={handleSaveEmpSettings} disabled={isSavingSettings} className="h-10 text-xs bg-primary text-primary-foreground">
                   {isSavingSettings ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Save Employee'}
                 </Button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* TAB 5: INVENTORY CONTROL */}
-        {activeTab === 'inventory' && (
-          <div className="space-y-6 animate-fadeIn">
-            {/* Controls Bar */}
-            <div className="bg-card/60 backdrop-blur-xl border border-border/80 rounded-2xl p-5 shadow-lg flex justify-between items-center flex-wrap gap-4">
-              <div>
-                <h2 className="font-semibold text-base text-foreground flex items-center gap-2">
-                  <Briefcase className="w-4 h-4 text-primary" /> Inventory Stock Ledger
-                </h2>
-                <p className="text-muted-foreground text-xs mt-0.5">Auto-deducted deployed units from vessel deployment reports, manual defective logs, and arrival tracking.</p>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60" />
-                  <input
-                    type="text"
-                    placeholder="Search inventory..."
-                    value={inventorySearch}
-                    onChange={(e) => setInventorySearch(e.target.value)}
-                    className={cn(inputCls, 'pl-9')}
-                  />
-                </div>
-                <Button 
-                  onClick={() => setShowAddCustomItemModal(true)}
-                  className="h-9 px-4 text-xs font-semibold rounded-lg bg-primary text-primary-foreground hover:bg-primary/95 flex items-center gap-1.5"
-                >
-                  <Plus className="w-3.5 h-3.5" /> Add Custom Item
-                </Button>
-              </div>
-            </div>
-
-            {/* Inventory Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-              {inventory.filter(item => 
-                (item.name || '').toLowerCase().includes(inventorySearch.toLowerCase()) ||
-                (item.deviceCode || '').toLowerCase().includes(inventorySearch.toLowerCase())
-              ).map((item) => {
-                const totalStockIn = (item.arrivalsLog || []).reduce((acc: number, log: any) => acc + log.qty, 0);
-                const totalDeployed = getDeployedCount(item.id);
-                const totalDefective = (item.defectiveLog || []).reduce((acc: number, log: any) => acc + log.qty, 0);
-                const availableStock = totalStockIn - totalDeployed - totalDefective;
-                const isLowStock = availableStock <= 5;
-
-                return (
-                  <div key={item.id} className="bg-card border border-border/60 rounded-2xl p-5 shadow-md flex flex-col justify-between hover:border-primary/40 transition-all duration-300 relative overflow-hidden group">
-                    <div className="space-y-4">
-                      {/* Top Header */}
-                      <div className="flex justify-between items-start gap-2">
-                        <div className="min-w-0">
-                          <h3 className="font-bold text-sm text-foreground truncate">{item.name}</h3>
-                          <p className="text-[10px] text-muted-foreground font-mono truncate">{item.deviceCode}</p>
-                        </div>
-                        <Badge 
-                          variant="outline" 
-                          className={cn(
-                            'text-[9px] uppercase tracking-wider px-2 shrink-0 border-border/50 text-muted-foreground'
-                          )}
-                        >
-                          {item.category}
-                        </Badge>
-                      </div>
-
-                      {/* Large Available stock count */}
-                      <div className="flex items-baseline gap-2 pt-2">
-                        <span className={cn('text-3xl font-extrabold tracking-tight', isLowStock ? 'text-destructive' : 'text-primary')}>
-                          {availableStock}
-                        </span>
-                        <span className="text-xs text-muted-foreground font-medium">available units</span>
-                        {isLowStock ? (
-                          <Badge className="ml-auto bg-destructive/10 text-destructive border-destructive/20 text-[9px] hover:bg-destructive/15">Low Stock</Badge>
-                        ) : (
-                          <Badge className="ml-auto bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-[9px] hover:bg-emerald-500/15">In Stock</Badge>
-                        )}
-                      </div>
-
-                      {/* Stat summary grid */}
-                      <div className="grid grid-cols-3 gap-2 py-3 px-3.5 bg-muted/20 border border-border/40 rounded-xl text-center text-[11px]">
-                        <div>
-                          <p className="text-muted-foreground text-[10px] uppercase font-semibold">Total In</p>
-                          <p className="font-bold text-foreground mt-0.5">{totalStockIn}</p>
-                        </div>
-                        <div className="border-x border-border/40">
-                          <p className="text-muted-foreground text-[10px] uppercase font-semibold">Deployed</p>
-                          <p className="font-bold text-foreground mt-0.5">{totalDeployed}</p>
-                        </div>
-                        <div>
-                          <p className="text-muted-foreground text-[10px] uppercase font-semibold">Defective</p>
-                          <p className="font-bold text-foreground mt-0.5">{totalDefective}</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Actions Grid */}
-                    <div className="grid grid-cols-3 gap-2 mt-5 pt-3 border-t border-border/40">
-                      <button
-                        onClick={() => {
-                          setSelectedInventoryItem(item);
-                          setArrivalDate(format(new Date(), 'yyyy-MM-dd'));
-                          setShowArrivalModal(true);
-                        }}
-                        className="py-2 text-[10px] font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/20 transition-all rounded-lg cursor-pointer"
-                      >
-                        Log Arrival
-                      </button>
-                      <button
-                        onClick={() => {
-                          setSelectedInventoryItem(item);
-                          setDefectiveRemarks('');
-                          setDefectiveDate(format(new Date(), 'yyyy-MM-dd'));
-                          setShowDefectiveModal(true);
-                        }}
-                        className="py-2 text-[10px] font-semibold text-destructive bg-destructive/10 border border-destructive/20 hover:bg-destructive/20 transition-all rounded-lg cursor-pointer"
-                      >
-                        Defective
-                      </button>
-                      <button
-                        onClick={() => {
-                          setSelectedInventoryItem(item);
-                          setDetailActiveTab('deployments');
-                          setDetailPage(1);
-                          setShowDetailModal(true);
-                        }}
-                        className="py-2 text-[10px] font-semibold text-blue-400 bg-blue-600/10 border border-blue-600/20 hover:bg-blue-600/20 transition-all rounded-lg cursor-pointer"
-                      >
-                        Details Log
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* MODAL 1: LOG STOCK ARRIVAL */}
-        {showArrivalModal && selectedInventoryItem && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/30 backdrop-blur-md p-4 animate-fadeIn">
-            <div className="bg-card border border-border rounded-2xl w-full max-w-md p-6 shadow-2xl relative animate-fadeInUp">
-              <button 
-                onClick={() => setShowArrivalModal(false)}
-                className="absolute top-4 right-4 p-1.5 hover:bg-muted rounded-lg text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
-              <h3 className="font-bold text-lg text-foreground mb-1">Log Stock Arrival</h3>
-              <p className="text-xs text-muted-foreground mb-4">Item: <span className="text-primary font-medium">{selectedInventoryItem.name}</span></p>
-              
-              <form onSubmit={handleAddArrival} className="space-y-4">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Arrival Quantity</label>
-                  <input 
-                    type="number" 
-                    required 
-                    min="1"
-                    value={arrivalQty}
-                    onChange={e => setArrivalQty(e.target.value)}
-                    className="bg-muted/50 border-border text-foreground focus:border-primary/50 focus:ring-1 focus:ring-primary/20 outline-none text-sm h-10 px-3 w-full rounded-lg border transition-all"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Arrival Type</label>
-                  <select 
-                    value={arrivalType}
-                    onChange={e => setArrivalType(e.target.value as any)}
-                    className="w-full rounded-lg border bg-muted/50 border-border px-3 py-2 text-sm text-foreground focus:border-primary/50 focus:ring-1 focus:ring-primary/20 outline-none"
-                  >
-                    <option value="New Arrival" className="bg-card">New Arrival (Acquisitions/Supplier)</option>
-                    <option value="Found Item" className="bg-card">Found Item (Warehouse discovery/etc.)</option>
-                  </select>
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Source / Origin Remarks</label>
-                  <input 
-                    type="text"
-                    required
-                    placeholder="e.g. Manila Supplier Shipment, Found in cabinet 2" 
-                    value={arrivalSource}
-                    onChange={e => setArrivalSource(e.target.value)}
-                    className="bg-muted/50 border-border text-foreground focus:border-primary/50 focus:ring-1 focus:ring-primary/20 outline-none text-sm h-10 px-3 w-full rounded-lg border transition-all"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Arrival Date</label>
-                  <input 
-                    type="date"
-                    required 
-                    value={arrivalDate}
-                    onChange={e => setArrivalDate(e.target.value)}
-                    className="bg-muted/50 border-border text-foreground focus:border-primary/50 focus:ring-1 focus:ring-primary/20 outline-none text-sm h-10 px-3 w-full rounded-lg border transition-all"
-                  />
-                </div>
-
-                <div className="flex justify-end gap-2 pt-2">
-                  <Button type="button" variant="outline" onClick={() => setShowArrivalModal(false)} className="h-10 text-xs border-border hover:bg-muted text-foreground bg-transparent">Cancel</Button>
-                  <Button type="submit" disabled={isSubmittingInventory} className="h-10 text-xs bg-primary text-primary-foreground">
-                    {isSubmittingInventory ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Log Stock Entry'}
-                  </Button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {/* MODAL 2: REPORT DEFECTIVE STOCK */}
-        {showDefectiveModal && selectedInventoryItem && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/30 backdrop-blur-md p-4 animate-fadeIn">
-            <div className="bg-card border border-border rounded-2xl w-full max-w-md p-6 shadow-2xl relative animate-fadeInUp">
-              <button 
-                onClick={() => setShowDefectiveModal(false)}
-                className="absolute top-4 right-4 p-1.5 hover:bg-muted rounded-lg text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
-              <h3 className="font-bold text-lg text-foreground mb-1">Report Defective Stock</h3>
-              <p className="text-xs text-muted-foreground mb-4">Item: <span className="text-primary font-medium">{selectedInventoryItem.name}</span></p>
-              
-              <form onSubmit={handleAddDefective} className="space-y-4">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Defective Quantity</label>
-                  <input 
-                    type="number" 
-                    required 
-                    min="1"
-                    value={defectiveQty}
-                    onChange={e => setDefectiveQty(e.target.value)}
-                    className="bg-muted/50 border-border text-foreground focus:border-primary/50 focus:ring-1 focus:ring-primary/20 outline-none text-sm h-10 px-3 w-full rounded-lg border transition-all"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Defect Remarks / Reason (Optional)</label>
-                  <textarea 
-                    placeholder="e.g. Broken connector, Failed visual check, Battery leakage" 
-                    value={defectiveRemarks}
-                    onChange={e => setDefectiveRemarks(e.target.value)}
-                    className="bg-muted/50 border-border text-foreground focus:border-primary/50 focus:ring-1 focus:ring-primary/20 outline-none text-xs p-3 w-full h-20 rounded-lg border transition-all resize-none"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Date Logged</label>
-                  <input 
-                    type="date"
-                    required 
-                    value={defectiveDate}
-                    onChange={e => setDefectiveDate(e.target.value)}
-                    className="bg-muted/50 border-border text-foreground focus:border-primary/50 focus:ring-1 focus:ring-primary/20 outline-none text-sm h-10 px-3 w-full rounded-lg border transition-all"
-                  />
-                </div>
-
-                <div className="flex justify-end gap-2 pt-2">
-                  <Button type="button" variant="outline" onClick={() => setShowDefectiveModal(false)} className="h-10 text-xs border-border hover:bg-muted text-foreground bg-transparent">Cancel</Button>
-                  <Button type="submit" disabled={isSubmittingInventory} className="h-10 text-xs bg-primary text-primary-foreground">
-                    {isSubmittingInventory ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Log Defect'}
-                  </Button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {/* MODAL 3: ADD CUSTOM INVENTORY ITEM */}
-        {showAddCustomItemModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/30 backdrop-blur-md p-4 animate-fadeIn">
-            <div className="bg-card border border-border rounded-2xl w-full max-w-md p-6 shadow-2xl relative animate-fadeInUp">
-              <button 
-                onClick={() => setShowAddCustomItemModal(false)}
-                className="absolute top-4 right-4 p-1.5 hover:bg-muted rounded-lg text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
-              <h3 className="font-bold text-lg text-foreground mb-4">Add Custom Hardware Item</h3>
-              
-              <form onSubmit={handleAddCustomItem} className="space-y-4">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Item Name</label>
-                  <input 
-                    type="text" 
-                    required 
-                    placeholder="e.g. Bracket SP2.0 High Grade"
-                    value={customItemName}
-                    onChange={e => setCustomItemName(e.target.value)}
-                    className="bg-muted/50 border-border text-foreground focus:border-primary/50 focus:ring-1 focus:ring-primary/20 outline-none text-sm h-10 px-3 w-full rounded-lg border transition-all"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Hardware Code / Spec</label>
-                  <input 
-                    type="text" 
-                    placeholder="e.g. SP2.0-HG"
-                    value={customItemCode}
-                    onChange={e => setCustomItemCode(e.target.value)}
-                    className="bg-muted/50 border-border text-foreground focus:border-primary/50 focus:ring-1 focus:ring-primary/20 outline-none text-sm h-10 px-3 w-full rounded-lg border transition-all"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Item Category</label>
-                  <select 
-                    value={customItemCategory}
-                    onChange={e => setCustomItemCategory(e.target.value as any)}
-                    className="w-full rounded-lg border bg-muted/50 border-border px-3 py-2 text-sm text-foreground focus:border-primary/50 focus:ring-1 focus:ring-primary/20 outline-none"
-                  >
-                    <option value="device" className="bg-card">Hardware Device (Device)</option>
-                    <option value="bracket" className="bg-card">Mount / bracket (Bracket)</option>
-                  </select>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Initial Stock Qty</label>
-                    <input 
-                      type="number" 
-                      min="0"
-                      value={customItemInitialStock}
-                      onChange={e => setCustomItemInitialStock(e.target.value)}
-                      className="bg-muted/50 border-border text-foreground focus:border-primary/50 focus:ring-1 focus:ring-primary/20 outline-none text-sm h-10 px-3 w-full rounded-lg border transition-all"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Initial Stock Source</label>
-                    <input 
-                      type="text" 
-                      placeholder="e.g. Initial Setup"
-                      value={customItemInitialSource}
-                      onChange={e => setCustomItemInitialSource(e.target.value)}
-                      className="bg-muted/50 border-border text-foreground focus:border-primary/50 focus:ring-1 focus:ring-primary/20 outline-none text-sm h-10 px-3 w-full rounded-lg border transition-all"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex justify-end gap-2 pt-2">
-                  <Button type="button" variant="outline" onClick={() => setShowAddCustomItemModal(false)} className="h-10 text-xs border-border hover:bg-muted text-foreground bg-transparent">Cancel</Button>
-                  <Button type="submit" disabled={isSubmittingInventory} className="h-10 text-xs bg-primary text-primary-foreground">
-                    {isSubmittingInventory ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Register Item'}
-                  </Button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {/* MODAL 4: INVENTORY HISTORY & DETAILED LEDGER SHEET */}
-        {showDetailModal && selectedInventoryItem && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/30 backdrop-blur-md p-4 animate-fadeIn">
-            <div className="bg-card border border-border rounded-2xl w-full max-w-2xl p-6 shadow-2xl relative animate-fadeInUp flex flex-col max-h-[85vh]">
-              <button 
-                onClick={() => setShowDetailModal(false)}
-                className="absolute top-4 right-4 p-1.5 hover:bg-muted rounded-lg text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
-              
-              <h3 className="font-bold text-lg text-foreground mb-1">Item Detailed Ledger</h3>
-              <p className="text-xs text-muted-foreground mb-4">Item: <span className="text-primary font-medium">{selectedInventoryItem.name} ({selectedInventoryItem.deviceCode})</span></p>
-
-              {/* Subtabs selection */}
-              <div className="flex border-b border-border/40 gap-2 mb-4">
-                {[
-                  { id: 'deployments', label: 'Deployments (Vessels)' },
-                  { id: 'arrivals', label: 'Arrivals Registry' },
-                  { id: 'defective', label: 'Defect Logs' }
-                ].map(t => (
-                  <button
-                    key={t.id}
-                    onClick={() => { setDetailActiveTab(t.id as any); setDetailPage(1); }}
-                    className={cn(
-                      'px-3 py-2 text-xs font-semibold border-b-2 -mb-px transition-all cursor-pointer',
-                      detailActiveTab === t.id ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'
-                    )}
-                  >
-                    {t.label}
-                  </button>
-                ))}
-              </div>
-
-              {/* Ledger Lists Content */}
-              <div className="flex-1 overflow-y-auto pr-1 min-h-[300px]">
-                {detailActiveTab === 'deployments' && (() => {
-                  const data = getDeploymentHistory(selectedInventoryItem.id);
-                  const totalPages = Math.ceil(data.length / 10) || 1;
-                  const slice = data.slice((detailPage - 1) * 10, detailPage * 10);
-                  return (
-                    <div className="space-y-4">
-                      <div className="overflow-x-auto border border-border/60 rounded-xl">
-                        <table className="w-full text-left text-xs min-w-[500px]">
-                          <thead>
-                            <tr className="bg-muted/40 border-b border-border/60 font-semibold text-muted-foreground">
-                              <th className="px-4 py-2.5">Vessel Name</th>
-                              <th className="px-4 py-2.5">Date Deployed</th>
-                              <th className="px-4 py-2.5">Lead Engineer</th>
-                              <th className="px-4 py-2.5 text-center">Qty</th>
-                              <th className="px-4 py-2.5 text-right">Reference</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {slice.length > 0 ? slice.map((item, idx) => (
-                              <tr key={idx} className="border-b border-border/40 hover:bg-muted/20 transition-colors">
-                                <td className="px-4 py-2.5 font-medium text-foreground">{item.vesselName}</td>
-                                <td className="px-4 py-2.5 text-muted-foreground">{item.date}</td>
-                                <td className="px-4 py-2.5 text-muted-foreground">{item.engineer}</td>
-                                <td className="px-4 py-2.5 text-center font-bold text-foreground">{item.qty}</td>
-                                <td className="px-4 py-2.5 text-right">
-                                  <Button
-                                    onClick={() => {
-                                      setShowDetailModal(false);
-                                      router.push(`/dashboard/equipment-accountability?reportId=${item.reportId}`);
-                                    }}
-                                    variant="outline" size="sm" className="h-6 text-[10px] bg-blue-600/10 border-blue-600/20 text-blue-400"
-                                  >
-                                    View Vessel
-                                  </Button>
-                                </td>
-                              </tr>
-                            )) : (
-                              <tr>
-                                <td colSpan={5} className="text-center py-8 text-muted-foreground">No deployment records found for this hardware item.</td>
-                              </tr>
-                            )}
-                          </tbody>
-                        </table>
-                      </div>
-                      {data.length > 10 && (
-                        <div className="flex justify-between items-center text-[11px] pt-1">
-                          <span className="text-muted-foreground">Page {detailPage} of {totalPages} ({data.length} records)</span>
-                          <div className="flex gap-2">
-                            <Button disabled={detailPage === 1} onClick={() => setDetailPage(p => p - 1)} variant="outline" size="sm" className="h-7 text-[10px] bg-transparent border-border">Prev</Button>
-                            <Button disabled={detailPage === totalPages} onClick={() => setDetailPage(p => p + 1)} variant="outline" size="sm" className="h-7 text-[10px] bg-transparent border-border">Next</Button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()}
-
-                {detailActiveTab === 'arrivals' && (() => {
-                  const data = selectedInventoryItem.arrivalsLog || [];
-                  const totalPages = Math.ceil(data.length / 10) || 1;
-                  const slice = data.slice((detailPage - 1) * 10, detailPage * 10);
-                  return (
-                    <div className="space-y-4">
-                      <div className="overflow-x-auto border border-border/60 rounded-xl">
-                        <table className="w-full text-left text-xs min-w-[500px]">
-                          <thead>
-                            <tr className="bg-muted/40 border-b border-border/60 font-semibold text-muted-foreground">
-                              <th className="px-4 py-2.5">Date Added</th>
-                              <th className="px-4 py-2.5">Qty</th>
-                              <th className="px-4 py-2.5">Acquisition Type</th>
-                              <th className="px-4 py-2.5">Source Remarks / Origin</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {slice.length > 0 ? slice.map((item: any, idx: number) => (
-                              <tr key={idx} className="border-b border-border/40 hover:bg-muted/20 transition-colors">
-                                <td className="px-4 py-2.5 text-muted-foreground">{item.date}</td>
-                                <td className="px-4 py-2.5 font-bold text-emerald-400">+{item.qty} units</td>
-                                <td className="px-4 py-2.5">
-                                  <Badge className={cn('text-[9px] px-1.5', item.type === 'Found Item' ? 'bg-yellow-500/10 border-yellow-500/20 text-yellow-500 hover:bg-yellow-500/15' : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/15')}>
-                                    {item.type}
-                                  </Badge>
-                                </td>
-                                <td className="px-4 py-2.5 text-foreground font-medium">{item.source}</td>
-                              </tr>
-                            )) : (
-                              <tr>
-                                <td colSpan={4} className="text-center py-8 text-muted-foreground">No stock arrivals have been logged yet.</td>
-                              </tr>
-                            )}
-                          </tbody>
-                        </table>
-                      </div>
-                      {data.length > 10 && (
-                        <div className="flex justify-between items-center text-[11px] pt-1">
-                          <span className="text-muted-foreground">Page {detailPage} of {totalPages} ({data.length} entries)</span>
-                          <div className="flex gap-2">
-                            <Button disabled={detailPage === 1} onClick={() => setDetailPage(p => p - 1)} variant="outline" size="sm" className="h-7 text-[10px] bg-transparent border-border">Prev</Button>
-                            <Button disabled={detailPage === totalPages} onClick={() => setDetailPage(p => p + 1)} variant="outline" size="sm" className="h-7 text-[10px] bg-transparent border-border">Next</Button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()}
-
-                {detailActiveTab === 'defective' && (() => {
-                  const data = selectedInventoryItem.defectiveLog || [];
-                  const totalPages = Math.ceil(data.length / 10) || 1;
-                  const slice = data.slice((detailPage - 1) * 10, detailPage * 10);
-                  return (
-                    <div className="space-y-4">
-                      <div className="overflow-x-auto border border-border/60 rounded-xl">
-                        <table className="w-full text-left text-xs min-w-[500px]">
-                          <thead>
-                            <tr className="bg-muted/40 border-b border-border/60 font-semibold text-muted-foreground">
-                              <th className="px-4 py-2.5">Date Logged</th>
-                              <th className="px-4 py-2.5">Qty Deducted</th>
-                              <th className="px-4 py-2.5">Defect Remarks</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {slice.length > 0 ? slice.map((item: any, idx: number) => (
-                              <tr key={idx} className="border-b border-border/40 hover:bg-muted/20 transition-colors">
-                                <td className="px-4 py-2.5 text-muted-foreground">{item.date}</td>
-                                <td className="px-4 py-2.5 font-bold text-destructive">-{item.qty} units</td>
-                                <td className="px-4 py-2.5 text-foreground font-medium">{item.remarks}</td>
-                              </tr>
-                            )) : (
-                              <tr>
-                                <td colSpan={3} className="text-center py-8 text-muted-foreground">No defective logs have been recorded.</td>
-                              </tr>
-                            )}
-                          </tbody>
-                        </table>
-                      </div>
-                      {data.length > 10 && (
-                        <div className="flex justify-between items-center text-[11px] pt-1">
-                          <span className="text-muted-foreground">Page {detailPage} of {totalPages} ({data.length} entries)</span>
-                          <div className="flex gap-2">
-                            <Button disabled={detailPage === 1} onClick={() => setDetailPage(p => p - 1)} variant="outline" size="sm" className="h-7 text-[10px] bg-transparent border-border">Prev</Button>
-                            <Button disabled={detailPage === totalPages} onClick={() => setDetailPage(p => p + 1)} variant="outline" size="sm" className="h-7 text-[10px] bg-transparent border-border">Next</Button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()}
-              </div>
-
-              <div className="flex justify-end pt-4 border-t border-border/40">
-                <Button type="button" onClick={() => setShowDetailModal(false)} className="h-9 text-xs bg-primary text-primary-foreground px-4">Close Ledger</Button>
               </div>
             </div>
           </div>

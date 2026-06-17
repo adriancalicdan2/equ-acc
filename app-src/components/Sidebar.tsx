@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { FileText, Wallet, Shield, LogOut, Menu, X, Clock } from 'lucide-react';
+import { FileText, Wallet, Shield, LogOut, Menu, X, Clock, Briefcase } from 'lucide-react';
 import { useAuth } from '@/lib/firebase/AuthContext';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
@@ -13,6 +13,12 @@ const VIEWS = [
     label: 'Equipment Accountability',
     icon: FileText,
     href: '/dashboard/equipment-accountability',
+  },
+  {
+    id: 'inventory',
+    label: 'Inventory Control',
+    icon: Briefcase,
+    href: '/dashboard/inventory',
   },
   {
     id: 'petty-cash',
