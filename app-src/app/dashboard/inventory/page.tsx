@@ -223,18 +223,8 @@ export default function InventoryControlPage() {
         count += parseInt(report.network?.qty || '0', 10) || 0;
       } else if (itemId === 'sd' || itemId === 'bracket-sd') {
         count += parseInt(report.engine?.qty || '0', 10) || 0;
-      } else if (itemId === 'fls-floater-m') {
-        const sns = (report.flsFloater?.serialNumber || '').split(',').map((s: string) => s.trim()).filter(Boolean);
-        count += sns.filter((sn: string) => {
-          const digits = sn.replace(/\D/g, '');
-          return digits ? parseInt(digits, 10) % 2 !== 0 : false;
-        }).length;
-      } else if (itemId === 'fls-floater-std') {
-        const sns = (report.flsFloater?.serialNumber || '').split(',').map((s: string) => s.trim()).filter(Boolean);
-        count += sns.filter((sn: string) => {
-          const digits = sn.replace(/\D/g, '');
-          return digits ? parseInt(digits, 10) % 2 === 0 : false;
-        }).length;
+      } else if (itemId === 'fls-floater-m' || itemId === 'fls-floater-std') {
+        count += parseInt(report.flsFloater?.qty || '0', 10) || 0;
       } else if (itemId === 'fls-capacitance') {
         count += parseInt(report.flsCapacitance?.qty || '0', 10) || 0;
       } else if (itemId === 'bracket-sp2') {
@@ -255,18 +245,8 @@ export default function InventoryControlPage() {
         qty = parseInt(report.network?.qty || '0', 10) || 0;
       } else if (itemId === 'sd' || itemId === 'bracket-sd') {
         qty = parseInt(report.engine?.qty || '0', 10) || 0;
-      } else if (itemId === 'fls-floater-m') {
-        const sns = (report.flsFloater?.serialNumber || '').split(',').map((s: string) => s.trim()).filter(Boolean);
-        qty = sns.filter((sn: string) => {
-          const digits = sn.replace(/\D/g, '');
-          return digits ? parseInt(digits, 10) % 2 !== 0 : false;
-        }).length;
-      } else if (itemId === 'fls-floater-std') {
-        const sns = (report.flsFloater?.serialNumber || '').split(',').map((s: string) => s.trim()).filter(Boolean);
-        qty = sns.filter((sn: string) => {
-          const digits = sn.replace(/\D/g, '');
-          return digits ? parseInt(digits, 10) % 2 === 0 : false;
-        }).length;
+      } else if (itemId === 'fls-floater-m' || itemId === 'fls-floater-std') {
+        qty = parseInt(report.flsFloater?.qty || '0', 10) || 0;
       } else if (itemId === 'fls-capacitance') {
         qty = parseInt(report.flsCapacitance?.qty || '0', 10) || 0;
       } else if (itemId === 'bracket-sp2') {
