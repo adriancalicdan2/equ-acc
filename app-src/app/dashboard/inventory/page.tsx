@@ -90,12 +90,70 @@ export default function InventoryControlPage() {
     const unsubscribe = onSnapshot(q, async (snapshot) => {
       const docs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
       
+      // Delete old fls-floater if it exists and migrate to fls-floater-m and fls-floater-std
+      const hasOldFloater = docs.some(d => d.id === 'fls-floater');
+      if (hasOldFloater) {
+        try {
+          const { deleteDoc, doc, setDoc } = await import('firebase/firestore');
+          await deleteDoc(doc(firestore, 'inventory', 'fls-floater'));
+          await setDoc(doc(firestore, 'inventory', 'fls-floater-m'), {
+            name: 'FLS Floater SP2.0AR(M)',
+            deviceCode: 'SP2.0AR(M)',
+            category: 'device',
+            arrivalsLog: [],
+            defectiveLog: [],
+            createdAt: new Date()
+          });
+          await setDoc(doc(firestore, 'inventory', 'fls-floater-std'), {
+            name: 'FLS Floater SP2.0AR',
+            deviceCode: 'SP2.0AR',
+            category: 'device',
+            arrivalsLog: [],
+            defectiveLog: [],
+            createdAt: new Date()
+          });
+          console.log('Migrated FLS Floater items successfully');
+        } catch (err) {
+          console.error('Failed to migrate FLS Floater items:', err);
+        }
+        return;
+      }
+
+      // Seed missing floaters if not present
+      const hasFloaterM = docs.some(d => d.id === 'fls-floater-m');
+      const hasFloaterStd = docs.some(d => d.id === 'fls-floater-std');
+      if (!hasFloaterM && !hasFloaterStd && docs.length > 0) {
+        try {
+          const { doc, setDoc } = await import('firebase/firestore');
+          await setDoc(doc(firestore, 'inventory', 'fls-floater-m'), {
+            name: 'FLS Floater SP2.0AR(M)',
+            deviceCode: 'SP2.0AR(M)',
+            category: 'device',
+            arrivalsLog: [],
+            defectiveLog: [],
+            createdAt: new Date()
+          });
+          await setDoc(doc(firestore, 'inventory', 'fls-floater-std'), {
+            name: 'FLS Floater SP2.0AR',
+            deviceCode: 'SP2.0AR',
+            category: 'device',
+            arrivalsLog: [],
+            defectiveLog: [],
+            createdAt: new Date()
+          });
+        } catch (err) {
+          console.error('Failed to seed missing floater items:', err);
+        }
+        return;
+      }
+
       if (docs.length === 0) {
         const defaultItems = [
           { id: 'terminal', name: 'Solar Terminal', deviceCode: 'Solar Panel Terminal', category: 'device', arrivalsLog: [], defectiveLog: [] },
           { id: 'nr', name: 'NR (Network Transmitter)', deviceCode: 'Wireless Network Transmitter', category: 'device', arrivalsLog: [], defectiveLog: [] },
           { id: 'sd', name: 'SD (Engine Hours Monitor)', deviceCode: 'Working Hours Engine Monitor', category: 'device', arrivalsLog: [], defectiveLog: [] },
-          { id: 'fls-floater', name: 'FLS Floater', deviceCode: 'SP2.0AR / SP2.0AR(M)', category: 'device', arrivalsLog: [], defectiveLog: [] },
+          { id: 'fls-floater-m', name: 'FLS Floater SP2.0AR(M)', deviceCode: 'SP2.0AR(M)', category: 'device', arrivalsLog: [], defectiveLog: [] },
+          { id: 'fls-floater-std', name: 'FLS Floater SP2.0AR', deviceCode: 'SP2.0AR', category: 'device', arrivalsLog: [], defectiveLog: [] },
           { id: 'fls-capacitance', name: 'FLS Capacitance', deviceCode: 'VPS1.2', category: 'device', arrivalsLog: [], defectiveLog: [] },
           { id: 'bracket-terminal', name: 'Terminal bracket', deviceCode: 'Solar Terminal Bracket', category: 'bracket', arrivalsLog: [], defectiveLog: [] },
           { id: 'bracket-sd', name: 'SD bracket', deviceCode: 'Engine Hours Monitor Bracket', category: 'bracket', arrivalsLog: [], defectiveLog: [] },
@@ -134,10 +192,23 @@ export default function InventoryControlPage() {
         count += parseInt(report.network?.qty || '0', 10) || 0;
       } else if (itemId === 'sd' || itemId === 'bracket-sd') {
         count += parseInt(report.engine?.qty || '0', 10) || 0;
-      } else if (itemId === 'fls-floater' || itemId === 'bracket-sp2') {
-        count += parseInt(report.flsFloater?.qty || '0', 10) || 0;
+      } else if (itemId === 'fls-floater-m') {
+        const sns = (report.flsFloater?.serialNumber || '').split(',').map((s: string) => s.trim()).filter(Boolean);
+        count += sns.filter((sn: string) => {
+          const digits = sn.replace(/\D/g, '');
+          return digits ? parseInt(digits, 10) % 2 !== 0 : false;
+        }).length;
+      } else if (itemId === 'fls-floater-std') {
+        const sns = (report.flsFloater?.serialNumber || '').split(',').map((s: string) => s.trim()).filter(Boolean);
+        count += sns.filter((sn: string) => {
+          const digits = sn.replace(/\D/g, '');
+          return digits ? parseInt(digits, 10) % 2 === 0 : false;
+        }).length;
       } else if (itemId === 'fls-capacitance') {
         count += parseInt(report.flsCapacitance?.qty || '0', 10) || 0;
+      } else if (itemId === 'bracket-sp2') {
+        const sns = (report.flsFloater?.serialNumber || '').split(',').map((s: string) => s.trim()).filter(Boolean);
+        count += sns.length;
       }
     });
     return count;
@@ -153,10 +224,23 @@ export default function InventoryControlPage() {
         qty = parseInt(report.network?.qty || '0', 10) || 0;
       } else if (itemId === 'sd' || itemId === 'bracket-sd') {
         qty = parseInt(report.engine?.qty || '0', 10) || 0;
-      } else if (itemId === 'fls-floater' || itemId === 'bracket-sp2') {
-        qty = parseInt(report.flsFloater?.qty || '0', 10) || 0;
+      } else if (itemId === 'fls-floater-m') {
+        const sns = (report.flsFloater?.serialNumber || '').split(',').map((s: string) => s.trim()).filter(Boolean);
+        qty = sns.filter((sn: string) => {
+          const digits = sn.replace(/\D/g, '');
+          return digits ? parseInt(digits, 10) % 2 !== 0 : false;
+        }).length;
+      } else if (itemId === 'fls-floater-std') {
+        const sns = (report.flsFloater?.serialNumber || '').split(',').map((s: string) => s.trim()).filter(Boolean);
+        qty = sns.filter((sn: string) => {
+          const digits = sn.replace(/\D/g, '');
+          return digits ? parseInt(digits, 10) % 2 === 0 : false;
+        }).length;
       } else if (itemId === 'fls-capacitance') {
         qty = parseInt(report.flsCapacitance?.qty || '0', 10) || 0;
+      } else if (itemId === 'bracket-sp2') {
+        const sns = (report.flsFloater?.serialNumber || '').split(',').map((s: string) => s.trim()).filter(Boolean);
+        qty = sns.length;
       }
       
       if (qty > 0) {
