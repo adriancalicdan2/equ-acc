@@ -167,9 +167,7 @@ function EquipmentAccountabilityContent() {
 
   useEffect(() => {
     if (!user) return;
-    const q = isAdmin
-      ? query(collection(firestore, 'reports'), orderBy('createdAt', 'desc'))
-      : query(collection(firestore, 'reports'), where('uid', '==', user.uid), orderBy('createdAt', 'desc'));
+    const q = query(collection(firestore, 'reports'), orderBy('createdAt', 'desc'));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setSavedReports(snapshot.docs.map(doc => ({
@@ -180,7 +178,7 @@ function EquipmentAccountabilityContent() {
       })));
     }, (error) => console.error('Error listening to reports:', error));
     return () => unsubscribe();
-  }, [user, isAdmin]);
+  }, [user]);
 
 
   const { register, handleSubmit, watch, setValue, reset, formState: { errors } } = useForm<AccountabilityFormValues>({
