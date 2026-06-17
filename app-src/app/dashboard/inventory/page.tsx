@@ -188,23 +188,24 @@ export default function InventoryControlPage() {
     
     const syncBaselines = async () => {
       for (const item of inventory) {
+        const totalDeployed = getDeployedCount(item.id);
+        const totalDefective = (item.defectiveLog || []).reduce((sum: number, entry: any) => sum + (entry.qty || 0), 0);
         const totalArrivals = (item.arrivalsLog || []).reduce((sum: number, entry: any) => sum + (entry.qty || 0), 0);
-        if (totalArrivals === 0) {
-          const deployedCount = getDeployedCount(item.id);
-          if (deployedCount > 0) {
-            try {
-              await setDoc(doc(firestore, 'inventory', item.id), {
-                arrivalsLog: [{
-                  qty: deployedCount,
-                  type: 'New Arrival' as const,
-                  source: 'Baseline Deployed Stock',
-                  date: format(new Date(), 'yyyy-MM-dd')
-                }]
-              }, { merge: true });
-              console.log(`Auto-seeded baseline stock of ${deployedCount} for ${item.name}`);
-            } catch (err) {
-              console.error(`Failed to auto-seed baseline stock for ${item.id}:`, err);
-            }
+        const targetArrivals = totalDeployed + totalDefective;
+        
+        if (totalArrivals !== targetArrivals) {
+          try {
+            await setDoc(doc(firestore, 'inventory', item.id), {
+              arrivalsLog: [{
+                qty: targetArrivals,
+                type: 'New Arrival' as const,
+                source: 'Baseline Deployed Stock',
+                date: format(new Date(), 'yyyy-MM-dd')
+              }]
+            }, { merge: true });
+            console.log(`Auto-adjusted stock to make available 0 for ${item.name}: set arrivals to ${targetArrivals}`);
+          } catch (err) {
+            console.error(`Failed to auto-adjust baseline stock for ${item.id}:`, err);
           }
         }
       }
@@ -218,15 +219,26 @@ export default function InventoryControlPage() {
     let count = 0;
     vesselReports.forEach(report => {
       if (itemId === 'terminal' || itemId === 'bracket-terminal') {
-        count += parseInt(report.solar?.qty || '0', 10) || 0;
+        const sns = (report.solar?.serialNumber || '').split(',').map((s: string) => s.trim()).filter(Boolean);
+        count += sns.length;
       } else if (itemId === 'nr' || itemId === 'bracket-nr') {
-        count += parseInt(report.network?.qty || '0', 10) || 0;
+        const sns = (report.network?.serialNumber || '').split(',').map((s: string) => s.trim()).filter(Boolean);
+        count += sns.length;
       } else if (itemId === 'sd' || itemId === 'bracket-sd') {
-        count += parseInt(report.engine?.qty || '0', 10) || 0;
+        const sns = (report.engine?.serialNumber || '').split(',').map((s: string) => s.trim()).filter(Boolean);
+        count += sns.length;
       } else if (itemId === 'fls-floater-m' || itemId === 'fls-floater-std') {
-        count += parseInt(report.flsFloater?.qty || '0', 10) || 0;
+        const sns = (report.flsFloater?.serialNumber || '').split(',').map((s: string) => s.trim()).filter(Boolean);
+        let mCount = 0;
+        let stdCount = 0;
+        sns.forEach((sn: string, idx: number) => {
+          if (idx % 2 === 0) mCount++;
+          else stdCount++;
+        });
+        count += (itemId === 'fls-floater-m' ? mCount : stdCount);
       } else if (itemId === 'fls-capacitance') {
-        count += parseInt(report.flsCapacitance?.qty || '0', 10) || 0;
+        const sns = (report.flsCapacitance?.serialNumber || '').split(',').map((s: string) => s.trim()).filter(Boolean);
+        count += sns.length;
       } else if (itemId === 'bracket-sp2') {
         const sns = (report.flsFloater?.serialNumber || '').split(',').map((s: string) => s.trim()).filter(Boolean);
         count += sns.length;
@@ -240,15 +252,26 @@ export default function InventoryControlPage() {
     vesselReports.forEach(report => {
       let qty = 0;
       if (itemId === 'terminal' || itemId === 'bracket-terminal') {
-        qty = parseInt(report.solar?.qty || '0', 10) || 0;
+        const sns = (report.solar?.serialNumber || '').split(',').map((s: string) => s.trim()).filter(Boolean);
+        qty = sns.length;
       } else if (itemId === 'nr' || itemId === 'bracket-nr') {
-        qty = parseInt(report.network?.qty || '0', 10) || 0;
+        const sns = (report.network?.serialNumber || '').split(',').map((s: string) => s.trim()).filter(Boolean);
+        qty = sns.length;
       } else if (itemId === 'sd' || itemId === 'bracket-sd') {
-        qty = parseInt(report.engine?.qty || '0', 10) || 0;
+        const sns = (report.engine?.serialNumber || '').split(',').map((s: string) => s.trim()).filter(Boolean);
+        qty = sns.length;
       } else if (itemId === 'fls-floater-m' || itemId === 'fls-floater-std') {
-        qty = parseInt(report.flsFloater?.qty || '0', 10) || 0;
+        const sns = (report.flsFloater?.serialNumber || '').split(',').map((s: string) => s.trim()).filter(Boolean);
+        let mCount = 0;
+        let stdCount = 0;
+        sns.forEach((sn: string, idx: number) => {
+          if (idx % 2 === 0) mCount++;
+          else stdCount++;
+        });
+        qty = (itemId === 'fls-floater-m' ? mCount : stdCount);
       } else if (itemId === 'fls-capacitance') {
-        qty = parseInt(report.flsCapacitance?.qty || '0', 10) || 0;
+        const sns = (report.flsCapacitance?.serialNumber || '').split(',').map((s: string) => s.trim()).filter(Boolean);
+        qty = sns.length;
       } else if (itemId === 'bracket-sp2') {
         const sns = (report.flsFloater?.serialNumber || '').split(',').map((s: string) => s.trim()).filter(Boolean);
         qty = sns.length;

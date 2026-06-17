@@ -245,24 +245,6 @@ function EquipmentAccountabilityContent() {
   };
 
   const validateOddEvenSns = (values: any): boolean => {
-    const floaterSnsList = (values.flsFloater?.serialNumber || '').split(',').map((s: string) => s.trim()).filter(Boolean);
-    for (let i = 0; i < floaterSnsList.length; i++) {
-      const sn = floaterSnsList[i];
-      const digits = sn.replace(/\D/g, '');
-      if (!digits) continue;
-      const num = parseInt(digits, 10);
-      if (i % 2 === 0) {
-        if (num % 2 === 0) {
-          toast.error(`Serial Number "${sn}" for SP2.0AR(M) (S/N #${i + 1}) must be an ODD number.`);
-          return false;
-        }
-      } else {
-        if (num % 2 !== 0) {
-          toast.error(`Serial Number "${sn}" for SP2.0AR (S/N #${i + 1}) must be an EVEN number.`);
-          return false;
-        }
-      }
-    }
     return true;
   };
 
@@ -684,11 +666,11 @@ function EquipmentAccountabilityContent() {
                         <Label className="text-xs font-semibold block text-muted-foreground mb-1">Floater Serial Numbers</Label>
                         <div className="space-y-2">
                           <div className="space-y-0.5">
-                            <span className="text-[10px] text-primary font-medium block">SP2.0AR(M) S/N (Must be Odd)</span>
+                            <span className="text-[10px] text-primary font-medium block">SP2.0AR(M) S/N</span>
                             <Input value={floaterSns[tankIdx * 2] || ''} onChange={e => handleSnsChange(tankIdx * 2, e.target.value, floaterSns, setFloaterSns, 'flsFloater.serialNumber')} placeholder="e.g. SN1001" className={inputCls} />
                           </div>
                           <div className="space-y-0.5">
-                            <span className="text-[10px] text-primary font-medium block">SP2.0AR S/N (Must be Even)</span>
+                            <span className="text-[10px] text-primary font-medium block">SP2.0AR S/N</span>
                             <Input value={floaterSns[tankIdx * 2 + 1] || ''} onChange={e => handleSnsChange(tankIdx * 2 + 1, e.target.value, floaterSns, setFloaterSns, 'flsFloater.serialNumber')} placeholder="e.g. SN1002" className={inputCls} />
                           </div>
                         </div>

@@ -154,15 +154,13 @@ export default function AdminPage() {
     
     const addSns = (raw: string | undefined, type: string) => {
       if (!raw) return;
-      raw.split(',').map(s => s.trim()).forEach(sn => {
+      raw.split(',').map(s => s.trim()).forEach((sn, idx) => {
         if (sn) {
           let finalType = type;
           if (type === 'Fuel Level Sensor (Capacitance)') {
             finalType = 'Fuel Level Sensor (VPS1.2)';
           } else if (type === 'Fuel Level Sensor (Floater)') {
-            const digits = sn.replace(/\D/g, '');
-            const num = digits ? parseInt(digits, 10) : 0;
-            if (num % 2 !== 0) {
+            if (idx % 2 === 0) {
               finalType = 'Fuel Level Sensor (SP2.0AR(M))';
             } else {
               finalType = 'Fuel Level Sensor (SP2.0AR)';
@@ -385,15 +383,30 @@ export default function AdminPage() {
     let count = 0;
     vesselReports.forEach(report => {
       if (itemId === 'terminal' || itemId === 'bracket-terminal') {
-        count += parseInt(report.solar?.qty || '0', 10) || 0;
+        const sns = (report.solar?.serialNumber || '').split(',').map((s: string) => s.trim()).filter(Boolean);
+        count += sns.length;
       } else if (itemId === 'nr' || itemId === 'bracket-nr') {
-        count += parseInt(report.network?.qty || '0', 10) || 0;
+        const sns = (report.network?.serialNumber || '').split(',').map((s: string) => s.trim()).filter(Boolean);
+        count += sns.length;
       } else if (itemId === 'sd' || itemId === 'bracket-sd') {
-        count += parseInt(report.engine?.qty || '0', 10) || 0;
-      } else if (itemId === 'fls-floater' || itemId === 'bracket-sp2') {
-        count += parseInt(report.flsFloater?.qty || '0', 10) || 0;
+        const sns = (report.engine?.serialNumber || '').split(',').map((s: string) => s.trim()).filter(Boolean);
+        count += sns.length;
+      } else if (itemId === 'fls-floater-m' || itemId === 'fls-floater-std' || itemId === 'fls-floater' || itemId === 'bracket-sp2') {
+        const sns = (report.flsFloater?.serialNumber || '').split(',').map((s: string) => s.trim()).filter(Boolean);
+        if (itemId === 'fls-floater-m') {
+          let mCount = 0;
+          sns.forEach((sn: string, idx: number) => { if (idx % 2 === 0) mCount++; });
+          count += mCount;
+        } else if (itemId === 'fls-floater-std') {
+          let stdCount = 0;
+          sns.forEach((sn: string, idx: number) => { if (idx % 2 !== 0) stdCount++; });
+          count += stdCount;
+        } else {
+          count += sns.length;
+        }
       } else if (itemId === 'fls-capacitance') {
-        count += parseInt(report.flsCapacitance?.qty || '0', 10) || 0;
+        const sns = (report.flsCapacitance?.serialNumber || '').split(',').map((s: string) => s.trim()).filter(Boolean);
+        count += sns.length;
       }
     });
     return count;
