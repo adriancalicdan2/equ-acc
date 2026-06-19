@@ -965,6 +965,21 @@ export default function AdminPage() {
                           />
                           Time Card
                         </label>
+                        <label className="flex items-center gap-2.5 text-xs text-foreground cursor-pointer select-none">
+                          <input 
+                            type="checkbox"
+                            checked={newEmpAllowedViews.includes('installation-report')}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setNewEmpAllowedViews([...newEmpAllowedViews, 'installation-report']);
+                              } else {
+                                setNewEmpAllowedViews(newEmpAllowedViews.filter(v => v !== 'installation-report'));
+                              }
+                            }}
+                            className="w-4 h-4 rounded border-border bg-muted/50 text-primary accent-primary"
+                          />
+                          Installation Report
+                        </label>
                       </div>
                     </div>
 
@@ -1087,6 +1102,15 @@ export default function AdminPage() {
                                   className="w-3.5 h-3.5 rounded border-neutral-700 accent-primary"
                                 />
                                 Time Card
+                              </label>
+                              <label className="flex items-center gap-1.5 cursor-pointer text-[11px]">
+                                <input 
+                                  type="checkbox"
+                                  checked={(emp.allowedViews || []).includes('installation-report')}
+                                  onChange={() => handleToggleViewPermission(emp.id, 'installation-report', emp.allowedViews || [])}
+                                  className="w-3.5 h-3.5 rounded border-neutral-700 accent-primary"
+                                />
+                                Installation Report
                               </label>
                             </div>
                           )}
@@ -1242,6 +1266,7 @@ export default function AdminPage() {
                         { id: 'inventory', label: 'Inventory Control' },
                         { id: 'petty-cash', label: 'Petty Cash' },
                         { id: 'time-card', label: 'Time Card' },
+                        { id: 'installation-report', label: 'Installation Report' },
                       ].map(v => {
                         const checked = editEmpAllowedViews.includes(v.id);
                         return (
