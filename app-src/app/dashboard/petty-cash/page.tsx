@@ -667,7 +667,7 @@ function PettyCashContent() {
                       <td className="px-2 py-1.5 font-medium text-neutral-800 max-w-[120px] truncate">{item.payeeName || '—'}</td>
                       <td className="px-2 py-1.5 text-neutral-600 max-w-[200px] truncate">{item.particular || '—'}</td>
                       <td className="px-2 py-1.5 text-right font-bold">₱{(parseFloat(item.gross) || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
-                      <td className="px-2 py-1.5 text-neutral-600 max-w-[150px] truncate">{item.remarks || '—'}</td>
+                      <td className="px-2 py-1.5 text-neutral-600 break-words">{item.remarks || '—'}</td>
                     </tr>
                   ))}
                   <tr className="bg-neutral-50 font-bold border-t border-neutral-200 text-neutral-800">
