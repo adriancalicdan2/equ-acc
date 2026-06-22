@@ -180,6 +180,31 @@ function PettyCashContent() {
   const approvedBy = watch('approvedBy');
   const approvedDate = watch('approvedDate');
 
+  const handleDownloadPDF = async () => {
+    const element = previewRef.current;
+    if (!element) return;
+
+    try {
+      toast.loading('Generating PDF...', { id: 'pdf-generation' });
+      // @ts-ignore
+      const html2canvas = (await import('html2canvas-pro')).default;
+      // @ts-ignore
+      const jsPDF = (await import('jspdf')).default;
+
+      const canvas = await html2canvas(element, { scale: 2, useCORS: true, logging: false });
+      const imgData = canvas.toDataURL('image/jpeg', 0.98);
+      const pdf = new jsPDF({ unit: 'in' as const, format: 'letter' as const, orientation: 'portrait' as const });
+      const imgWidth = 8.5 - 2 * 0.2; // Letter size width 8.5", margins 0.2"
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      pdf.addImage(imgData, 'JPEG', 0.2, 0.2, imgWidth, imgHeight);
+      pdf.save(`Petty-Cash-Report-${(companyName || 'report').replace(/\s+/g, '_')}-${(periodFrom || '').replace(/\//g, '-')}.pdf`);
+
+      toast.success('PDF downloaded successfully!', { id: 'pdf-generation' });
+    } catch (err: any) {
+      toast.error('PDF generation failed: ' + err.message, { id: 'pdf-generation' });
+    }
+  };
+
   const handlePrintPreview = () => {
     const element = previewRef.current;
     if (!element) return;
@@ -598,6 +623,13 @@ function PettyCashContent() {
 
         {/* Actions Row */}
         <div className="flex justify-end gap-3">
+          <Button
+            type="button"
+            onClick={handleDownloadPDF}
+            className="h-11 px-6 text-sm font-semibold rounded-xl bg-blue-600 border border-blue-700 text-white hover:bg-blue-500 transition-all duration-200 flex items-center gap-2"
+          >
+            <Download className="w-4 h-4" /> Download PDF
+          </Button>
           <Button
             type="button"
             onClick={handlePrintPreview}

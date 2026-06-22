@@ -8,7 +8,7 @@ import {
   collection, doc, getDoc, setDoc, onSnapshot, query, orderBy
 } from 'firebase/firestore';
 import { format, getDaysInMonth, getDay } from 'date-fns';
-import { Clock, Printer, Save, ChevronLeft, ChevronRight, Loader2, User, FileDown } from 'lucide-react';
+import { Clock, Printer, Save, ChevronLeft, ChevronRight, Loader2, User, FileDown, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -288,6 +288,31 @@ export default function TimeCardPage() {
   const [period1, setPeriod1] = useState<DayEntry[]>([]);
   const [period2, setPeriod2] = useState<DayEntry[]>([]);
   const [saving, setSaving] = useState(false);
+
+  const handleDownloadPDF = async () => {
+    const element = previewRef.current;
+    if (!element) return;
+
+    try {
+      toast.loading('Generating PDF...', { id: 'pdf-generation' });
+      // @ts-ignore
+      const html2canvas = (await import('html2canvas-pro')).default;
+      // @ts-ignore
+      const jsPDF = (await import('jspdf')).default;
+
+      const canvas = await html2canvas(element, { scale: 2, useCORS: true, logging: false });
+      const imgData = canvas.toDataURL('image/jpeg', 0.98);
+      const pdf = new jsPDF({ unit: 'in' as const, format: 'letter' as const, orientation: 'portrait' as const });
+      const imgWidth = 8.5 - 2 * 0.2; // Letter size width 8.5", margins 0.2"
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      pdf.addImage(imgData, 'JPEG', 0.2, 0.2, imgWidth, imgHeight);
+      pdf.save(`Timecard-${targetName.replace(/\s+/g, '-')}-${monthName.replace(/\s+/g, '-')}.pdf`);
+
+      toast.success('PDF downloaded successfully!', { id: 'pdf-generation' });
+    } catch (err: any) {
+      toast.error('PDF generation failed: ' + err.message, { id: 'pdf-generation' });
+    }
+  };
 
   const handlePrintPreview = () => {
     const element = previewRef.current;
@@ -717,6 +742,9 @@ export default function TimeCardPage() {
               </div>
 
               <div className="flex justify-end gap-3 no-print">
+                <Button type="button" onClick={handleDownloadPDF} className="h-10 px-5 text-sm bg-blue-600 hover:bg-blue-500 text-white flex items-center gap-2">
+                  <Download className="w-4 h-4" /> Download PDF
+                </Button>
                 <Button type="button" onClick={handlePrintPreview} variant="outline" className="h-10 px-5 text-sm border-border bg-transparent text-foreground hover:bg-muted flex items-center gap-2">
                   <Printer className="w-4 h-4" /> Print Preview
                 </Button>

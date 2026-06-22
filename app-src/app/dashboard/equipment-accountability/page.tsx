@@ -134,6 +134,33 @@ function EquipmentAccountabilityContent() {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
 
+  const handleDownloadPDF = async () => {
+    const element = previewRef.current;
+    if (!element) return;
+
+    try {
+      toast.loading('Generating PDF...', { id: 'pdf-generation' });
+      // @ts-ignore
+      const html2canvas = (await import('html2canvas-pro')).default;
+      // @ts-ignore
+      const jsPDF = (await import('jspdf')).default;
+
+      const canvas = await html2canvas(element, { scale: 2, useCORS: true, logging: false });
+      const imgData = canvas.toDataURL('image/jpeg', 0.98);
+      const pdf = new jsPDF({ unit: 'in' as const, format: 'letter' as const, orientation: 'portrait' as const });
+      const imgWidth = 8.5 - 2 * 0.2; // Letter size width 8.5", margins 0.2"
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      pdf.addImage(imgData, 'JPEG', 0.2, 0.2, imgWidth, imgHeight);
+      
+      const vName = watch('vesselInfo.vesselName') || 'Equipment-Accountability-Report';
+      pdf.save(`${vName.trim().replace(/[\/\\?%*:|"<>\u200b]/g, '-')}.pdf`);
+
+      toast.success('PDF downloaded successfully!', { id: 'pdf-generation' });
+    } catch (err: any) {
+      toast.error('PDF generation failed: ' + err.message, { id: 'pdf-generation' });
+    }
+  };
+
   const handlePrintPreview = () => {
     const element = previewRef.current;
     if (!element) return;
@@ -596,6 +623,9 @@ function EquipmentAccountabilityContent() {
                 {uploadingToDrive ? <><Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />Uploading...</> : <>
                   <svg className="w-4 h-4 mr-1.5" viewBox="0 0 24 24" fill="none"><path fill="#0066da" d="M19.38 17h-11.7l-3.32-6h11.7l3.32 6z"/><path fill="#00ac47" d="M9.1 17l6.02-10.87h5.83l-6.02 10.87h-5.83z"/><path fill="#ffba00" d="M3.82 11l6.02-10.87h5.83l-6.02 10.87h-5.83z"/></svg>
                   Upload to Drive</>}
+              </Button>
+              <Button type="button" onClick={handleDownloadPDF} className="h-10 px-4 text-xs font-semibold rounded-lg flex items-center justify-center bg-blue-600 border border-blue-700 text-white hover:bg-blue-500 w-full sm:w-auto">
+                <Download className="w-3.5 h-3.5 mr-1.5" /> Download PDF
               </Button>
               <Button type="button" onClick={handlePrintPreview} className="h-10 px-4 text-xs font-semibold rounded-lg flex items-center justify-center border border-border bg-transparent text-foreground hover:bg-muted w-full sm:w-auto">
                 <Printer className="w-3.5 h-3.5 mr-1.5" /> Print Preview
