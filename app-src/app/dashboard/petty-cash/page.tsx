@@ -493,24 +493,15 @@ function PettyCashContent() {
 
           {/* Table */}
           <div className="overflow-x-auto rounded-xl border border-border/60">
-            <table className="w-full text-xs min-w-[900px]">
+            <table className="w-full text-xs min-w-[700px]">
               <thead>
                 <tr className="bg-muted/40 border-b border-border/60">
                   <th className="px-2 py-2.5 text-left font-semibold text-muted-foreground w-24">Date</th>
                   <th className="px-2 py-2.5 text-left font-semibold text-muted-foreground w-24">Ref #</th>
                   <th className="px-2 py-2.5 text-left font-semibold text-muted-foreground w-36">Payee Name</th>
-                  <th className="px-2 py-2.5 text-left font-semibold text-muted-foreground w-28">TIN #</th>
-                  <th className="px-2 py-2.5 text-left font-semibold text-muted-foreground w-24">Particular</th>
-                  <th className="px-2 py-2.5 text-right font-semibold text-muted-foreground w-20">Gross (₱)</th>
-                  <th className="px-2 py-2.5 text-left font-semibold text-muted-foreground w-32">Remarks</th>
-                  <th className="px-2 py-2.5 text-right font-semibold text-muted-foreground w-16">VAT</th>
-                  <th className="px-2 py-2.5 text-right font-semibold text-muted-foreground w-16">Transpo</th>
-                  <th className="px-2 py-2.5 text-right font-semibold text-muted-foreground w-16">Meals</th>
-                  <th className="px-2 py-2.5 text-right font-semibold text-muted-foreground w-20">Freight</th>
-                  <th className="px-2 py-2.5 text-right font-semibold text-muted-foreground w-20">Comm.</th>
-                  <th className="px-2 py-2.5 text-right font-semibold text-muted-foreground w-20">Office Sup.</th>
-                  <th className="px-2 py-2.5 text-right font-semibold text-muted-foreground w-20">Misc.</th>
-                  <th className="px-2 py-2.5 text-right font-semibold text-muted-foreground w-16">Other</th>
+                  <th className="px-2 py-2.5 text-left font-semibold text-muted-foreground w-32">Particular</th>
+                  <th className="px-2 py-2.5 text-right font-semibold text-muted-foreground w-24">Amount (₱)</th>
+                  <th className="px-2 py-2.5 text-left font-semibold text-muted-foreground w-36">Remarks</th>
                   <th className="px-2 py-2.5 w-8"></th>
                 </tr>
               </thead>
@@ -520,18 +511,9 @@ function PettyCashContent() {
                     <td className="px-1 py-1"><Input {...register(`items.${idx}.date`)} className={inputCls} /></td>
                     <td className="px-1 py-1"><Input {...register(`items.${idx}.referenceNo`)} className={inputCls} /></td>
                     <td className="px-1 py-1"><Input {...register(`items.${idx}.payeeName`)} className={inputCls} /></td>
-                    <td className="px-1 py-1"><Input {...register(`items.${idx}.tin`)} className={inputCls} /></td>
                     <td className="px-1 py-1"><Input {...register(`items.${idx}.particular`)} className={inputCls} /></td>
                     <td className="px-1 py-1"><Input {...register(`items.${idx}.gross`)} type="number" step="0.01" className={cn(inputCls, 'text-right')} /></td>
                     <td className="px-1 py-1"><Input {...register(`items.${idx}.remarks`)} className={inputCls} /></td>
-                    <td className="px-1 py-1"><Input {...register(`items.${idx}.vat`)} type="number" step="0.01" className={cn(inputCls, 'text-right')} /></td>
-                    <td className="px-1 py-1"><Input {...register(`items.${idx}.transpo`)} type="number" step="0.01" className={cn(inputCls, 'text-right')} /></td>
-                    <td className="px-1 py-1"><Input {...register(`items.${idx}.meals`)} type="number" step="0.01" className={cn(inputCls, 'text-right')} /></td>
-                    <td className="px-1 py-1"><Input {...register(`items.${idx}.freight`)} type="number" step="0.01" className={cn(inputCls, 'text-right')} /></td>
-                    <td className="px-1 py-1"><Input {...register(`items.${idx}.communication`)} type="number" step="0.01" className={cn(inputCls, 'text-right')} /></td>
-                    <td className="px-1 py-1"><Input {...register(`items.${idx}.officeSupplies`)} type="number" step="0.01" className={cn(inputCls, 'text-right')} /></td>
-                    <td className="px-1 py-1"><Input {...register(`items.${idx}.miscellaneous`)} type="number" step="0.01" className={cn(inputCls, 'text-right')} /></td>
-                    <td className="px-1 py-1"><Input {...register(`items.${idx}.other`)} type="number" step="0.01" className={cn(inputCls, 'text-right')} /></td>
                     <td className="px-1 py-1">
                       <button type="button" onClick={() => remove(idx)} disabled={fields.length === 1}
                         className="p-1 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-30">
@@ -542,11 +524,11 @@ function PettyCashContent() {
                 ))}
                 {/* Totals row */}
                 <tr className="bg-muted/30 font-semibold border-t border-border">
-                  <td colSpan={5} className="px-3 py-2 text-right text-xs text-muted-foreground">TOTAL</td>
+                  <td colSpan={4} className="px-3 py-2 text-right text-xs text-muted-foreground">TOTAL</td>
                   <td className="px-2 py-2 text-right text-xs text-primary">
                     ₱{totalGross.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
                   </td>
-                  <td colSpan={9} />
+                  <td colSpan={2} />
                 </tr>
               </tbody>
             </table>
@@ -675,15 +657,8 @@ function PettyCashContent() {
                     <th className="px-2 py-2">Ref #</th>
                     <th className="px-2 py-2">Payee Name</th>
                     <th className="px-2 py-2">Particular</th>
-                    <th className="px-2 py-2 text-right">Gross (₱)</th>
-                    <th className="px-2 py-2 text-right">VAT</th>
-                    <th className="px-2 py-2 text-right">Transpo</th>
-                    <th className="px-2 py-2 text-right">Meals</th>
-                    <th className="px-2 py-2 text-right">Freight</th>
-                    <th className="px-2 py-2 text-right">Comm</th>
-                    <th className="px-2 py-2 text-right">Office Sup</th>
-                    <th className="px-2 py-2 text-right">Misc</th>
-                    <th className="px-2 py-2 text-right">Other</th>
+                    <th className="px-2 py-2 text-right">Amount (₱)</th>
+                    <th className="px-2 py-2">Remarks</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-neutral-100">
@@ -691,23 +666,16 @@ function PettyCashContent() {
                     <tr key={idx} className="hover:bg-neutral-50/50">
                       <td className="px-2 py-1.5 text-neutral-500">{item.date || '—'}</td>
                       <td className="px-2 py-1.5 font-mono">{item.referenceNo || '—'}</td>
-                      <td className="px-2 py-1.5 font-medium text-neutral-800 max-w-[80px] truncate">{item.payeeName || '—'}</td>
-                      <td className="px-2 py-1.5 text-neutral-600 max-w-[100px] truncate">{item.particular || '—'}</td>
+                      <td className="px-2 py-1.5 font-medium text-neutral-800 max-w-[120px] truncate">{item.payeeName || '—'}</td>
+                      <td className="px-2 py-1.5 text-neutral-600 max-w-[200px] truncate">{item.particular || '—'}</td>
                       <td className="px-2 py-1.5 text-right font-bold">₱{(parseFloat(item.gross) || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
-                      <td className="px-2 py-1.5 text-right text-neutral-500">₱{(parseFloat(item.vat) || 0).toLocaleString('en-US')}</td>
-                      <td className="px-2 py-1.5 text-right text-neutral-500">₱{(parseFloat(item.transpo) || 0).toLocaleString('en-US')}</td>
-                      <td className="px-2 py-1.5 text-right text-neutral-500">₱{(parseFloat(item.meals) || 0).toLocaleString('en-US')}</td>
-                      <td className="px-2 py-1.5 text-right text-neutral-500">₱{(parseFloat(item.freight) || 0).toLocaleString('en-US')}</td>
-                      <td className="px-2 py-1.5 text-right text-neutral-500">₱{(parseFloat(item.communication) || 0).toLocaleString('en-US')}</td>
-                      <td className="px-2 py-1.5 text-right text-neutral-500">₱{(parseFloat(item.officeSupplies) || 0).toLocaleString('en-US')}</td>
-                      <td className="px-2 py-1.5 text-right text-neutral-500">₱{(parseFloat(item.miscellaneous) || 0).toLocaleString('en-US')}</td>
-                      <td className="px-2 py-1.5 text-right text-neutral-500">₱{(parseFloat(item.other) || 0).toLocaleString('en-US')}</td>
+                      <td className="px-2 py-1.5 text-neutral-600 max-w-[150px] truncate">{item.remarks || '—'}</td>
                     </tr>
                   ))}
                   <tr className="bg-neutral-50 font-bold border-t border-neutral-200 text-neutral-800">
                     <td colSpan={4} className="px-2 py-2 text-right">TOTAL EXPENSES:</td>
                     <td className="px-2 py-2 text-right text-red-600">₱{totalGross.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
-                    <td colSpan={8} />
+                    <td colSpan={1} />
                   </tr>
                 </tbody>
               </table>
