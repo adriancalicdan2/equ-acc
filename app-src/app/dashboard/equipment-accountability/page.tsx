@@ -139,23 +139,42 @@ function EquipmentAccountabilityContent() {
     if (!element) return;
 
     try {
-      toast.loading('Generating PDF...', { id: 'pdf-generation' });
-      // @ts-ignore
-      const html2canvas = (await import('html2canvas-pro')).default;
-      // @ts-ignore
-      const jsPDF = (await import('jspdf')).default;
+       toast.loading('Generating PDF...', { id: 'pdf-generation' });
+       // @ts-ignore
+       const html2canvas = (await import('html2canvas-pro')).default;
+       // @ts-ignore
+       const jsPDF = (await import('jspdf')).default;
 
-      const canvas = await html2canvas(element, { scale: 2, useCORS: true, logging: false });
-      const imgData = canvas.toDataURL('image/jpeg', 0.98);
-      const pdf = new jsPDF({ unit: 'in' as const, format: 'letter' as const, orientation: 'portrait' as const });
-      const imgWidth = 8.5 - 2 * 0.2; // Letter size width 8.5", margins 0.2"
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      pdf.addImage(imgData, 'JPEG', 0.2, 0.2, imgWidth, imgHeight);
-      
-      const vName = watch('vesselInfo.vesselName') || 'Equipment-Accountability-Report';
-      pdf.save(`${vName.trim().replace(/[\/\\?%*:|"<>\u200b]/g, '-')}.pdf`);
+       const canvas = await html2canvas(element, { scale: 2, useCORS: true, logging: false });
+       const imgData = canvas.toDataURL('image/jpeg', 0.98);
+       
+       const pdf = new jsPDF({ unit: 'in' as const, format: 'letter' as const, orientation: 'portrait' as const });
+       const pageWidth = 8.5;
+       const pageHeight = 11;
+       const margin = 0.2;
+       const maxImgWidth = pageWidth - 2 * margin;
+       const maxImgHeight = pageHeight - 2 * margin;
 
-      toast.success('PDF downloaded successfully!', { id: 'pdf-generation' });
+       const imgWidth = maxImgWidth;
+       const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+       let heightLeft = imgHeight;
+       let position = margin;
+
+       pdf.addImage(imgData, 'JPEG', margin, position, imgWidth, imgHeight);
+       heightLeft -= maxImgHeight;
+
+       while (heightLeft > 0) {
+         position = position - maxImgHeight;
+         pdf.addPage();
+         pdf.addImage(imgData, 'JPEG', margin, position, imgWidth, imgHeight);
+         heightLeft -= maxImgHeight;
+       }
+
+       const vName = watch('vesselInfo.vesselName') || 'Equipment-Accountability-Report';
+       pdf.save(`${vName.trim().replace(/[\/\\?%*:|"<>\u200b]/g, '-')}.pdf`);
+
+       toast.success('PDF downloaded successfully!', { id: 'pdf-generation' });
     } catch (err: any) {
       toast.error('PDF generation failed: ' + err.message, { id: 'pdf-generation' });
     }

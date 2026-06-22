@@ -41,10 +41,30 @@ export default function InventoryControlPage() {
 
       const canvas = await html2canvas(element, { scale: 2, useCORS: true, logging: false });
       const imgData = canvas.toDataURL('image/jpeg', 0.98);
+      
       const pdf = new jsPDF({ unit: 'in' as const, format: 'letter' as const, orientation: 'portrait' as const });
-      const imgWidth = 8.5 - 2 * 0.2; // Letter size width 8.5", margins 0.2"
+      const pageWidth = 8.5;
+      const pageHeight = 11;
+      const margin = 0.2;
+      const maxImgWidth = pageWidth - 2 * margin;
+      const maxImgHeight = pageHeight - 2 * margin;
+
+      const imgWidth = maxImgWidth;
       const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      pdf.addImage(imgData, 'JPEG', 0.2, 0.2, imgWidth, imgHeight);
+
+      let heightLeft = imgHeight;
+      let position = margin;
+
+      pdf.addImage(imgData, 'JPEG', margin, position, imgWidth, imgHeight);
+      heightLeft -= maxImgHeight;
+
+      while (heightLeft > 0) {
+        position = position - maxImgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'JPEG', margin, position, imgWidth, imgHeight);
+        heightLeft -= maxImgHeight;
+      }
+
       pdf.save(`Inventory-Ledger-Report-${format(new Date(), 'yyyy-MM-dd')}.pdf`);
 
       toast.success('PDF downloaded successfully!', { id: 'pdf-generation' });
