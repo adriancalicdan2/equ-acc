@@ -349,7 +349,7 @@ export default function PayslipPage() {
   };
 
   // Trigger PDF download of the exact preview
-  const handleDownloadPDF = () => {
+  const handleDownloadPDF = async () => {
     if (!form.employeeName) {
       toast.error('Please select or specify an employee first');
       return;
@@ -357,89 +357,57 @@ export default function PayslipPage() {
     const element = previewRef.current;
     if (!element) return;
 
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      toast.error('Please allow popups to print/download PDF');
-      return;
+    try {
+      // @ts-ignore
+      const html2pdf = (await import('html2pdf.js')).default;
+      const opt = {
+        margin:       0.2,
+        filename:     `Payslip-${form.employeeName.replace(/\s+/g, '_')}.pdf`,
+        image:        { type: 'jpeg' as const, quality: 0.98 },
+        html2canvas:  { scale: 2, useCORS: true, logging: false },
+        jsPDF:        { unit: 'in' as const, format: 'letter' as const, orientation: 'portrait' as const }
+      };
+
+      toast.loading('Generating PDF...', { id: 'pdf-generation' });
+      await html2pdf().set(opt).from(element).save();
+      toast.success('PDF downloaded successfully!', { id: 'pdf-generation' });
+    } catch (err: any) {
+      toast.error('PDF generation failed: ' + err.message, { id: 'pdf-generation' });
+      
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        toast.error('Please allow popups to print/download PDF');
+        return;
+      }
+
+      const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
+        .map(el => el.outerHTML)
+        .join('\n');
+      const content = element.innerHTML;
+
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>Payslip-${form.employeeName.replace(/\s+/g, '_')}</title>
+            ${styles}
+            <style>
+              @page { margin: 0; }
+              body { background: white !important; color: black !important; padding: 2cm !important; margin: 0 !important; }
+              .printable-payslip { width: 100% !important; max-width: 100% !important; border: none !important; box-shadow: none !important; padding: 0 !important; margin: 0 !important; }
+            </style>
+          </head>
+          <body>
+            <div class="printable-payslip">${content}</div>
+            <script>
+              window.focus();
+              window.print();
+              setTimeout(() => window.close(), 500);
+            </script>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
     }
-
-    // Copy the styles of the current page so layout looks identical
-    const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
-      .map(el => el.outerHTML)
-      .join('\n');
-
-    const content = element.innerHTML;
-
-    printWindow.document.write(`
-      <html>
-        <head>
-          <title>Payslip-${form.employeeName.replace(/\s+/g, '_')}</title>
-          ${styles}
-          <style>
-            @page {
-              margin: 0;
-            }
-            body {
-              background: white !important;
-              color: black !important;
-              padding: 2cm !important;
-              margin: 0 !important;
-            }
-            .printable-payslip {
-              width: 100% !important;
-              max-width: 100% !important;
-              border: none !important;
-              box-shadow: none !important;
-              padding: 0 !important;
-              margin: 0 !important;
-              page-break-inside: avoid !important;
-              break-inside: avoid !important;
-            }
-            .print-hidden {
-              display: none !important;
-              visibility: hidden !important;
-            }
-          </style>
-        </head>
-        <body>
-          <div class="printable-payslip">
-            ${content}
-          </div>
-          <script>
-            Promise.all(Array.from(document.querySelectorAll('link[rel="stylesheet"]')).map(link => {
-              return new Promise(resolve => {
-                link.onload = resolve;
-                link.onerror = resolve;
-                setTimeout(resolve, 1000);
-              });
-            })).then(() => {
-              const script = document.createElement('script');
-              script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
-              script.onload = () => {
-                const element = document.querySelector('.printable-payslip');
-                const opt = {
-                  margin:       0.2,
-                  filename:     document.title + '.pdf',
-                  image:        { type: 'jpeg', quality: 0.98 },
-                  html2canvas:  { scale: 2, useCORS: true, logging: false },
-                  jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
-                };
-                html2pdf().set(opt).from(element).save().then(() => {
-                  setTimeout(() => window.close(), 1000);
-                });
-              };
-              script.onerror = () => {
-                window.focus();
-                window.print();
-                setTimeout(() => window.close(), 500);
-              };
-              document.head.appendChild(script);
-            });
-          </script>
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
   };
 
   // Trigger Excel download
