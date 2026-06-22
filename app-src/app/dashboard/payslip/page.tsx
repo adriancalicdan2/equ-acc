@@ -358,18 +358,21 @@ export default function PayslipPage() {
     if (!element) return;
 
     try {
-      // @ts-ignore
-      const html2pdf = (await import('html2pdf.js')).default;
-      const opt = {
-        margin:       0.2,
-        filename:     `Payslip-${form.employeeName.replace(/\s+/g, '_')}.pdf`,
-        image:        { type: 'jpeg' as const, quality: 0.98 },
-        html2canvas:  { scale: 2, useCORS: true, logging: false },
-        jsPDF:        { unit: 'in' as const, format: 'letter' as const, orientation: 'portrait' as const }
-      };
-
       toast.loading('Generating PDF...', { id: 'pdf-generation' });
-      await html2pdf().set(opt).from(element).save();
+      
+      // @ts-ignore
+      const html2canvas = (await import('html2canvas-pro')).default;
+      // @ts-ignore
+      const jsPDF = (await import('jspdf')).default;
+
+      const canvas = await html2canvas(element, { scale: 2, useCORS: true, logging: false });
+      const imgData = canvas.toDataURL('image/jpeg', 0.98);
+      const pdf = new jsPDF({ unit: 'in' as const, format: 'letter' as const, orientation: 'portrait' as const });
+      const imgWidth = 8.5 - 2 * 0.2; // Letter size width 8.5", margins 0.2"
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      pdf.addImage(imgData, 'JPEG', 0.2, 0.2, imgWidth, imgHeight);
+      pdf.save(`Payslip-${form.employeeName.replace(/\s+/g, '_')}.pdf`);
+
       toast.success('PDF downloaded successfully!', { id: 'pdf-generation' });
     } catch (err: any) {
       toast.error('PDF generation failed: ' + err.message, { id: 'pdf-generation' });
