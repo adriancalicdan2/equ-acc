@@ -413,11 +413,27 @@ export default function PayslipPage() {
                 setTimeout(resolve, 1000);
               });
             })).then(() => {
-              setTimeout(() => {
+              const script = document.createElement('script');
+              script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+              script.onload = () => {
+                const element = document.querySelector('.printable-payslip');
+                const opt = {
+                  margin:       0.2,
+                  filename:     document.title + '.pdf',
+                  image:        { type: 'jpeg', quality: 0.98 },
+                  html2canvas:  { scale: 2, useCORS: true, logging: false },
+                  jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
+                };
+                html2pdf().set(opt).from(element).save().then(() => {
+                  setTimeout(() => window.close(), 1000);
+                });
+              };
+              script.onerror = () => {
                 window.focus();
                 window.print();
                 setTimeout(() => window.close(), 500);
-              }, 500);
+              };
+              document.head.appendChild(script);
             });
           </script>
         </body>
