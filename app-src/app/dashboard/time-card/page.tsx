@@ -21,6 +21,7 @@ interface DayEntry {
   status: DayStatus;
   timeIn: string;     // HH:mm (24h)
   timeOut: string;    // HH:mm (24h)
+  otRemarks?: string;
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -86,6 +87,7 @@ function makeDefaultEntries(dates: string[], restDays: number[]): DayEntry[] {
       status: isRest ? 'Rest Day' : 'Present',
       timeIn: isRest ? '' : '08:00',
       timeOut: isRest ? '' : '18:00',
+      otRemarks: '',
     };
   });
 }
@@ -159,6 +161,7 @@ function PeriodTable({
               <th className="px-3 py-2.5 text-left w-28">Time Out</th>
               <th className="px-3 py-2.5 text-center w-24">Hours Worked</th>
               <th className="px-3 py-2.5 text-center w-20">OT Hours</th>
+              <th className="px-3 py-2.5 text-left w-48">OT Reason / Remarks</th>
             </tr>
           </thead>
           <tbody>
@@ -237,6 +240,16 @@ function PeriodTable({
                       {isAbsent || entry.status === 'Holiday No Work' || (isRest && ot === 0) ? '—' : fmt2(ot)}
                     </span>
                   </td>
+                  <td className="px-3 py-2">
+                    <input
+                      type="text"
+                      value={entry.otRemarks || ''}
+                      placeholder={ot > 0 ? "Reason for OT..." : "No OT"}
+                      disabled={!(ot > 0)}
+                      onChange={e => update(idx, { otRemarks: e.target.value })}
+                      className={cn(inputCls, !(ot > 0) && 'opacity-40 cursor-not-allowed')}
+                    />
+                  </td>
                 </tr>
               );
             })}
@@ -246,6 +259,7 @@ function PeriodTable({
               <td colSpan={5} className="px-3 py-2.5 text-right">Period Total:</td>
               <td className="px-3 py-2.5 text-center text-primary">{fmt2(totalHours)}</td>
               <td className="px-3 py-2.5 text-center text-amber-400">{fmt2(totalOT)}</td>
+              <td className="px-3 py-2.5" />
             </tr>
           </tfoot>
         </table>
@@ -782,6 +796,7 @@ export default function TimeCardPage() {
                               <th className="px-3 py-1.5">Time Out</th>
                               <th className="px-3 py-1.5 text-center">Hours Worked</th>
                               <th className="px-3 py-1.5 text-center">OT Hours</th>
+                              <th className="px-3 py-1.5">OT Remarks / Reason</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-neutral-100">
@@ -804,6 +819,7 @@ export default function TimeCardPage() {
                                   <td className="px-3 py-1 font-mono">{entry.timeOut || '—'}</td>
                                   <td className="px-3 py-1 text-center font-bold">{entry.status === 'Absent' ? '—' : fmt2(hrs)}</td>
                                   <td className="px-3 py-1 text-center font-bold text-amber-600">{ot > 0 ? fmt2(ot) : '—'}</td>
+                                  <td className="px-3 py-1 text-neutral-600">{entry.otRemarks || '—'}</td>
                                 </tr>
                               );
                             })}

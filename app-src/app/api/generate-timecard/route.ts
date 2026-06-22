@@ -9,6 +9,7 @@ interface DayEntry {
   status: DayStatus;
   timeIn: string;     // HH:mm
   timeOut: string;    // HH:mm
+  otRemarks?: string;
 }
 
 function calcHours(entry: DayEntry): number {
@@ -54,6 +55,20 @@ export async function POST(req: NextRequest) {
     ws.getCell('A3').value = `Name: ${employeeName}`;
     ws.getCell('G3').value = `Name: ${employeeName}`;
 
+    // Set OT Remarks headers and styles
+    const f5 = ws.getCell('F5');
+    const e5 = ws.getCell('E5');
+    f5.value = 'OT Remarks';
+    f5.style = { ...e5.style };
+
+    const l5 = ws.getCell('L5');
+    const k5 = ws.getCell('K5');
+    l5.value = 'OT Remarks';
+    l5.style = { ...k5.style };
+
+    ws.getColumn('F').width = 25;
+    ws.getColumn('L').width = 25;
+
     // Fill Period 1 (11th to 25th) -> Row 7 to 21
     period1.forEach((entry: DayEntry) => {
       const datePart = entry.date.split('-');
@@ -77,6 +92,12 @@ export async function POST(req: NextRequest) {
           ws.getCell(`D${row}`).value = calcHours(entry);
           ws.getCell(`E${row}`).value = calcOT(entry, shiftHours);
         }
+
+        const cellF = ws.getCell(`F${row}`);
+        cellF.value = entry.otRemarks || '';
+        const cellE = ws.getCell(`E${row}`);
+        cellF.style = { ...cellE.style };
+        cellF.alignment = { horizontal: 'left', vertical: 'middle' };
       }
     });
 
@@ -117,6 +138,12 @@ export async function POST(req: NextRequest) {
           ws.getCell(`J${row}`).value = calcHours(entry);
           ws.getCell(`K${row}`).value = calcOT(entry, shiftHours);
         }
+
+        const cellL = ws.getCell(`L${row}`);
+        cellL.value = entry.otRemarks || '';
+        const cellK = ws.getCell(`K${row}`);
+        cellL.style = { ...cellK.style };
+        cellL.alignment = { horizontal: 'left', vertical: 'middle' };
       }
     });
 
@@ -130,6 +157,7 @@ export async function POST(req: NextRequest) {
         ws.getCell(`I${row}`).value = null;
         ws.getCell(`J${row}`).value = null;
         ws.getCell(`K${row}`).value = null;
+        ws.getCell(`L${row}`).value = null;
       }
     }
 
