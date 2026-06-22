@@ -260,11 +260,11 @@ function PettyCashContent() {
     try {
       const payload = { 
         ...values, 
-        companyName: 'LEAD TREND MARINE SERVICES CO. LTD.', 
         createdAt: new Date(), 
         uid: auth?.currentUser?.uid ?? null 
       };
-      const docId = `LEAD-TREND_${values.periodFrom}_${values.periodTo}`.trim().replace(/[\/\\?%*:|"<>]/g, '-');
+      const companyPrefix = values.companyName.includes('LEAD') ? 'LEAD-TREND' : 'AIMF';
+      const docId = `${companyPrefix}_${values.periodFrom}_${values.periodTo}`.trim().replace(/[\/\\?%*:|"<>]/g, '-');
       await setDoc(doc(firestore, 'petty-cash-reports', docId), payload, { merge: true });
       setSelectedReportId(docId);
       toast.success('Petty Cash report saved successfully!');
@@ -281,11 +281,11 @@ function PettyCashContent() {
     try {
       const payload = { 
         ...values, 
-        companyName: 'LEAD TREND MARINE SERVICES CO. LTD.', 
         createdAt: new Date(), 
         uid: auth?.currentUser?.uid ?? null 
       };
-      const docId = `LEAD-TREND_${values.periodFrom}_${values.periodTo}`.trim().replace(/[\/\\?%*:|"<>]/g, '-');
+      const companyPrefix = values.companyName.includes('LEAD') ? 'LEAD-TREND' : 'AIMF';
+      const docId = `${companyPrefix}_${values.periodFrom}_${values.periodTo}`.trim().replace(/[\/\\?%*:|"<>]/g, '-');
       if (selectedReportId !== docId) {
         try { await deleteDoc(doc(firestore, 'petty-cash-reports', selectedReportId)); } catch {}
       }
@@ -316,8 +316,7 @@ function PettyCashContent() {
     if (!report) return;
     setSelectedReportId(reportId);
     reset({
-      ...report.data,
-      companyName: 'LEAD TREND MARINE SERVICES CO. LTD.'
+      ...report.data
     });
     toast.success('Form filled with saved report info!');
   };
@@ -328,10 +327,7 @@ function PettyCashContent() {
       const res = await fetch('/api/generate-petty-cash', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...data,
-          companyName: 'LEAD TREND MARINE SERVICES CO. LTD.'
-        }),
+        body: JSON.stringify(data),
       });
       if (!res.ok) {
         const err = await res.json();
@@ -454,11 +450,13 @@ function PettyCashContent() {
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             <div className="md:col-span-5 space-y-1.5">
               <Label className="text-xs font-medium text-muted-foreground">Company Name</Label>
-              <Input 
-                {...register('companyName')} 
-                readOnly 
-                className={cn(inputCls, 'h-10 text-sm opacity-60 cursor-not-allowed bg-muted')} 
-              />
+              <select
+                {...register('companyName')}
+                className="bg-muted/50 border border-border rounded-lg px-3 h-10 text-sm text-foreground focus:border-primary/50 outline-none transition-all w-full appearance-none"
+              >
+                <option value="AIMF Technologies Corporation">AIMF Technologies Corporation</option>
+                <option value="LEAD TREND MARINE SERVICES CO. LTD.">LEAD TREND MARINE SERVICES CO. LTD.</option>
+              </select>
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-muted-foreground">Period From</Label>
