@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/firebase/AuthContext';
 import { firestore } from '@/lib/firebase/client';
@@ -14,7 +14,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
 // ─── Types ─────────────────────────────────────────────────────────────────
-type DayStatus = 'Present' | 'Absent' | 'Rest Day' | 'Half-day';
+type DayStatus = 'Present' | 'Absent' | 'Rest Day' | 'Half-day' | 'Regular Holiday' | 'Special Holiday' | 'Holiday No Work' | 'Special Holiday on Rest Day' | 'Regular Holiday on Rest Day' | 'Holiday';
 
 interface DayEntry {
   date: string;       // YYYY-MM-DD
@@ -31,7 +31,7 @@ function getDow(dateStr: string): number {
 }
 
 function calcHours(entry: DayEntry): number {
-  if (entry.status === 'Absent' || entry.status === 'Rest Day') return 0;
+  if (entry.status === 'Absent' || entry.status === 'Holiday No Work') return 0;
   if (!entry.timeIn || !entry.timeOut) return 0;
   const [inH, inM] = entry.timeIn.split(':').map(Number);
   const [outH, outM] = entry.timeOut.split(':').map(Number);
@@ -42,6 +42,11 @@ function calcHours(entry: DayEntry): number {
 }
 
 function calcOT(entry: DayEntry, shiftHours: number): number {
+  if (entry.status === 'Rest Day' || entry.status === 'Special Holiday on Rest Day' || entry.status === 'Regular Holiday on Rest Day') {
+    const hrs = calcHours(entry);
+    const restHrs = hrs >= 5 ? hrs - 1 : hrs;
+    return Math.max(0, restHrs - (shiftHours - 1));
+  }
   return Math.max(0, calcHours(entry) - shiftHours);
 }
 
@@ -162,7 +167,7 @@ function PeriodTable({
               const dow = getDay(dateObj);
               const dayName = DAY_NAMES[dow];
               const isRestDay = restDays.includes(dow);
-              const isRest = entry.status === 'Rest Day';
+              const isRest = entry.status === 'Rest Day' || entry.status === 'Special Holiday on Rest Day' || entry.status === 'Regular Holiday on Rest Day';
               const isAbsent = entry.status === 'Absent';
               const hrs = calcHours(entry);
               const ot = calcOT(entry, shiftHours);
@@ -172,7 +177,7 @@ function PeriodTable({
                   key={entry.date}
                   className={cn(
                     'border-b border-border/40 transition-colors',
-                    isRest ? 'bg-muted/10 opacity-60' : 'hover:bg-muted/20',
+                    isRest ? 'bg-muted/10 opacity-70' : 'hover:bg-muted/20',
                     isAbsent && 'bg-destructive/5'
                   )}
                 >
@@ -189,8 +194,8 @@ function PeriodTable({
                         const s = e.target.value as DayStatus;
                         update(idx, {
                           status: s,
-                          timeIn: (s === 'Rest Day' || s === 'Absent') ? '' : (entry.timeIn || '08:00'),
-                          timeOut: (s === 'Rest Day' || s === 'Absent') ? '' : (entry.timeOut || '18:00'),
+                          timeIn: (s === 'Rest Day' || s === 'Special Holiday on Rest Day' || s === 'Regular Holiday on Rest Day' || s === 'Absent' || s === 'Holiday No Work') ? '' : (entry.timeIn || '08:00'),
+                          timeOut: (s === 'Rest Day' || s === 'Special Holiday on Rest Day' || s === 'Regular Holiday on Rest Day' || s === 'Absent' || s === 'Holiday No Work') ? '' : (entry.timeOut || '18:00'),
                         });
                       }}
                       className={selectCls}
@@ -199,32 +204,37 @@ function PeriodTable({
                       <option value="Half-day">Half-day</option>
                       <option value="Absent">Absent</option>
                       <option value="Rest Day">Rest Day</option>
+                      <option value="Regular Holiday">Regular Holiday</option>
+                      <option value="Special Holiday">Special Holiday</option>
+                      <option value="Holiday No Work">Holiday No Work</option>
+                      <option value="Special Holiday on Rest Day">Special Holiday on Rest Day</option>
+                      <option value="Regular Holiday on Rest Day">Regular Holiday on Rest Day</option>
                     </select>
                   </td>
                   <td className="px-3 py-2">
                     <input
                       type="time"
                       value={entry.timeIn}
-                      disabled={isRest || isAbsent}
+                      disabled={isAbsent || entry.status === 'Holiday No Work'}
                       onChange={e => update(idx, { timeIn: e.target.value })}
-                      className={cn(inputCls, (isRest || isAbsent) && 'opacity-40 cursor-not-allowed')}
+                      className={cn(inputCls, (isAbsent || entry.status === 'Holiday No Work') && 'opacity-40 cursor-not-allowed')}
                     />
                   </td>
                   <td className="px-3 py-2">
                     <input
                       type="time"
                       value={entry.timeOut}
-                      disabled={isRest || isAbsent}
+                      disabled={isAbsent || entry.status === 'Holiday No Work'}
                       onChange={e => update(idx, { timeOut: e.target.value })}
-                      className={cn(inputCls, (isRest || isAbsent) && 'opacity-40 cursor-not-allowed')}
+                      className={cn(inputCls, (isAbsent || entry.status === 'Holiday No Work') && 'opacity-40 cursor-not-allowed')}
                     />
                   </td>
                   <td className="px-3 py-2 text-center font-semibold text-foreground">
-                    {isRest || isAbsent ? <span className="text-muted-foreground">—</span> : fmt2(hrs)}
+                    {isAbsent || entry.status === 'Holiday No Work' || (isRest && hrs === 0) ? <span className="text-muted-foreground">—</span> : fmt2(hrs)}
                   </td>
                   <td className="px-3 py-2 text-center">
                     <span className={cn('font-semibold', ot > 0 ? 'text-amber-400' : 'text-muted-foreground')}>
-                      {isRest || isAbsent ? '—' : fmt2(ot)}
+                      {isAbsent || entry.status === 'Holiday No Work' || (isRest && ot === 0) ? '—' : fmt2(ot)}
                     </span>
                   </td>
                 </tr>
@@ -247,6 +257,7 @@ function PeriodTable({
 // ─── Main Page ──────────────────────────────────────────────────────────────
 export default function TimeCardPage() {
   const router = useRouter();
+  const previewRef = useRef<HTMLDivElement>(null);
   const { user, displayName, shiftHours: myShiftHours, restDays: myRestDays, isAdmin, allowedViews, loading } = useAuth();
 
   const [employees, setEmployees] = useState<any[]>([]);
@@ -263,6 +274,52 @@ export default function TimeCardPage() {
   const [period1, setPeriod1] = useState<DayEntry[]>([]);
   const [period2, setPeriod2] = useState<DayEntry[]>([]);
   const [saving, setSaving] = useState(false);
+
+  const handlePrintPreview = () => {
+    const element = previewRef.current;
+    if (!element) return;
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      toast.error('Please allow popups to print/download PDF');
+      return;
+    }
+    const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
+      .map(el => el.outerHTML)
+      .join('\n');
+    const content = element.innerHTML;
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Timecard-${(targetName || 'report').replace(/\s+/g, '_')}</title>
+          ${styles}
+          <style>
+            @page { margin: 0; }
+            body { background: white !important; color: black !important; padding: 2cm !important; margin: 0 !important; }
+            .printable-report { width: 100% !important; max-width: 100% !important; border: none !important; box-shadow: none !important; padding: 0 !important; margin: 0 !important; }
+          </style>
+        </head>
+        <body>
+          <div class="printable-report">${content}</div>
+          <script>
+            Promise.all(Array.from(document.querySelectorAll('link[rel="stylesheet"]')).map(link => {
+              return new Promise(resolve => {
+                link.onload = resolve;
+                link.onerror = resolve;
+                setTimeout(resolve, 1000);
+              });
+            })).then(() => {
+              setTimeout(() => {
+                window.focus();
+                window.print();
+                setTimeout(() => window.close(), 500);
+              }, 500);
+            });
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
   const [dataLoading, setDataLoading] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState<'period1' | 'period2'>(
     now.getDate() >= 11 && now.getDate() <= 25 ? 'period1' : 'period2'
@@ -443,10 +500,6 @@ export default function TimeCardPage() {
               <p className="text-muted-foreground text-sm mt-1">Track attendance, hours worked, and overtime per cutoff period.</p>
             </div>
             <div className="flex gap-2">
-              <Button onClick={handleDownloadExcel} disabled={downloading || !targetUid} variant="outline" className="h-9 px-4 text-xs border-amber-500/30 hover:bg-amber-500/10 text-amber-400 hover:text-amber-300 bg-transparent flex items-center gap-1.5">
-                {downloading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileDown className="w-3.5 h-3.5" />}
-                Download Excel
-              </Button>
               <Button onClick={() => window.print()} variant="outline" className="h-9 px-4 text-xs border-border hover:bg-muted text-foreground bg-transparent flex items-center gap-1.5">
                 <Printer className="w-3.5 h-3.5" /> Print
               </Button>
@@ -649,11 +702,131 @@ export default function TimeCardPage() {
                 </div>
               </div>
 
-              <div className="flex justify-end no-print">
+              <div className="flex justify-end gap-3 no-print">
+                <Button type="button" onClick={handlePrintPreview} variant="outline" className="h-10 px-5 text-sm border-border bg-transparent text-foreground hover:bg-muted flex items-center gap-2">
+                  <Printer className="w-4 h-4" /> Print Preview
+                </Button>
                 <Button onClick={handleSave} disabled={saving || !targetUid} className="h-10 px-6 text-sm bg-primary text-primary-foreground flex items-center gap-2">
                   {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                   Save Time Card
                 </Button>
+              </div>
+
+              {/* Bottom Live Preview */}
+              <div className="space-y-4 pt-8 border-t border-border/40">
+                <div className="text-xs font-semibold text-muted-foreground tracking-wider uppercase text-center">
+                  Employee Time Card Report Live Preview
+                </div>
+
+                {(() => {
+                  const previewPeriodEntries = (selectedPeriod === 'period1' ? period1 : period2).filter(e => e.date <= todayStr);
+                  const previewHours = previewPeriodEntries.reduce((acc, e) => acc + calcHours(e), 0);
+                  const previewOT = previewPeriodEntries.reduce((acc, e) => acc + calcOT(e, shiftHours), 0);
+
+                  const getStatusStyle = (status: string) => {
+                    if (status === 'Rest Day') {
+                      return 'bg-amber-100 text-amber-800 border border-amber-200 px-1.5 py-0.5 rounded text-[8px] font-bold uppercase inline-block';
+                    }
+                    if (status === 'Absent') {
+                      return 'bg-red-100 text-red-800 border border-red-200 px-1.5 py-0.5 rounded text-[8px] font-bold uppercase inline-block';
+                    }
+                    if (status.includes('Holiday')) {
+                      return 'bg-emerald-100 text-emerald-800 border border-emerald-200 px-1.5 py-0.5 rounded text-[8px] font-bold uppercase inline-block';
+                    }
+                    return 'text-neutral-800 font-medium';
+                  };
+
+                  return (
+                    <div
+                      ref={previewRef}
+                      className="printable-report bg-white text-neutral-900 border border-neutral-200 rounded-xl p-8 shadow-2xl flex flex-col font-sans max-w-4xl mx-auto w-full text-xs"
+                    >
+                      {/* Header */}
+                      <div className="text-center space-y-1 border-b-2 border-neutral-200 pb-4 mb-6">
+                        <h2 className="text-lg font-black uppercase text-neutral-800 tracking-tight">Employee Time Card Sheet</h2>
+                        <div className="text-sm font-bold text-neutral-700">AIMF Technologies Corporation</div>
+                        <div className="text-[10px] text-neutral-500">
+                          Cutoff: {monthName} ({selectedPeriod === 'period1' ? 'Period 1: 11th - 25th' : 'Period 2: 26th - 10th'})
+                        </div>
+                      </div>
+
+                      {/* Metadata block */}
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-neutral-50 p-4 rounded-lg border border-neutral-100 mb-6 text-neutral-700">
+                        <div>
+                          <span className="text-[9px] uppercase font-bold text-neutral-400 block">Employee Name</span>
+                          <span className="font-bold text-neutral-800 text-sm">{targetName || '—'}</span>
+                        </div>
+                        <div>
+                          <span className="text-[9px] uppercase font-bold text-neutral-400 block">Shift Hours Limit</span>
+                          <span className="font-semibold text-neutral-800">{shiftHours} hours/day</span>
+                        </div>
+                        <div>
+                          <span className="text-[9px] uppercase font-bold text-neutral-400 block">Regular Rest Days</span>
+                          <span className="font-semibold text-amber-600">{restDayLabels}</span>
+                        </div>
+                        <div>
+                          <span className="text-[9px] uppercase font-bold text-neutral-400 block">Period Total Hours</span>
+                          <span className="font-bold text-emerald-600">{fmt2(previewHours)} (OT: {fmt2(previewOT)})</span>
+                        </div>
+                      </div>
+
+                      {/* Combined logs table */}
+                      <div className="border border-neutral-200 rounded-lg overflow-hidden mb-6">
+                        <table className="w-full text-left border-collapse text-neutral-700 text-[10px]">
+                          <thead>
+                            <tr className="bg-neutral-100 border-b border-neutral-200 text-neutral-600 font-bold uppercase tracking-wider text-[9px]">
+                              <th className="px-3 py-1.5">Date</th>
+                              <th className="px-3 py-1.5">Day</th>
+                              <th className="px-3 py-1.5">Status</th>
+                              <th className="px-3 py-1.5">Time In</th>
+                              <th className="px-3 py-1.5">Time Out</th>
+                              <th className="px-3 py-1.5 text-center">Hours Worked</th>
+                              <th className="px-3 py-1.5 text-center">OT Hours</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-neutral-100">
+                            {previewPeriodEntries.map((entry) => {
+                              const dateObj = new Date(entry.date + 'T00:00:00');
+                              const dow = getDay(dateObj);
+                              const dayName = DAY_NAMES[dow];
+                              const hrs = calcHours(entry);
+                              const ot = calcOT(entry, shiftHours);
+                              const isRest = entry.status === 'Rest Day' || entry.status === 'Special Holiday on Rest Day' || entry.status === 'Regular Holiday on Rest Day';
+
+                              return (
+                                <tr key={entry.date} className={cn("hover:bg-neutral-50/50", isRest && "bg-neutral-50/30")}>
+                                  <td className="px-3 py-1 text-neutral-500">{format(dateObj, 'MMM d, yyyy')}</td>
+                                  <td className="px-3 py-1 font-semibold text-neutral-600">{dayName}</td>
+                                  <td className="px-3 py-1">
+                                    <span className={getStatusStyle(entry.status)}>{entry.status}</span>
+                                  </td>
+                                  <td className="px-3 py-1 font-mono">{entry.timeIn || '—'}</td>
+                                  <td className="px-3 py-1 font-mono">{entry.timeOut || '—'}</td>
+                                  <td className="px-3 py-1 text-center font-bold">{entry.status === 'Absent' ? '—' : fmt2(hrs)}</td>
+                                  <td className="px-3 py-1 text-center font-bold text-amber-600">{ot > 0 ? fmt2(ot) : '—'}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Signatures */}
+                      <div className="border-t border-neutral-100 pt-6">
+                        <div className="grid grid-cols-2 gap-16 text-center text-neutral-700">
+                          <div className="space-y-2">
+                            <div className="border-b border-neutral-300 mx-auto w-48 h-8 font-serif text-sm italic flex items-end justify-center pb-1 text-neutral-800">{targetName}</div>
+                            <div className="text-[9px] uppercase font-bold text-neutral-500">Employee Signature</div>
+                          </div>
+                          <div className="space-y-2">
+                            <div className="border-b border-neutral-300 mx-auto w-48 h-8"></div>
+                            <div className="text-[9px] uppercase font-bold text-neutral-500">Approved By (Supervisor)</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             </>
           )}

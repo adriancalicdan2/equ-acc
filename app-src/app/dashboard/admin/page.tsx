@@ -640,14 +640,6 @@ export default function AdminPage() {
                           <td className="px-4 py-3 text-right font-semibold text-primary">₱{avail.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</td>
                           <td className="px-4 py-3 text-right flex justify-end gap-2 items-center">
                             <Button 
-                              onClick={() => handleDownloadPettyCash(report)}
-                              disabled={loadingPC === report.id}
-                              variant="outline" size="sm" className="h-8 px-2.5 text-xs flex items-center gap-1 bg-emerald-600/10 border-emerald-600/20 text-emerald-400 hover:bg-emerald-600/20"
-                            >
-                              {loadingPC === report.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                              Download
-                            </Button>
-                            <Button 
                               onClick={() => router.push(`/dashboard/petty-cash?reportId=${report.id}`)}
                               variant="outline" size="sm" className="h-8 px-2.5 text-xs flex items-center gap-1 bg-blue-600/10 border-blue-600/20 text-blue-400 hover:bg-blue-600/20"
                             >
@@ -980,6 +972,21 @@ export default function AdminPage() {
                           />
                           Installation Report
                         </label>
+                        <label className="flex items-center gap-2.5 text-xs text-foreground cursor-pointer select-none">
+                          <input 
+                            type="checkbox"
+                            checked={newEmpAllowedViews.includes('payslip')}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setNewEmpAllowedViews([...newEmpAllowedViews, 'payslip']);
+                              } else {
+                                setNewEmpAllowedViews(newEmpAllowedViews.filter(v => v !== 'payslip'));
+                              }
+                            }}
+                            className="w-4 h-4 rounded border-border bg-muted/50 text-primary accent-primary"
+                          />
+                          Payslip Center
+                        </label>
                       </div>
                     </div>
 
@@ -1111,6 +1118,15 @@ export default function AdminPage() {
                                   className="w-3.5 h-3.5 rounded border-neutral-700 accent-primary"
                                 />
                                 Installation Report
+                              </label>
+                              <label className="flex items-center gap-1.5 cursor-pointer text-[11px]">
+                                <input 
+                                  type="checkbox"
+                                  checked={(emp.allowedViews || []).includes('payslip')}
+                                  onChange={() => handleToggleViewPermission(emp.id, 'payslip', emp.allowedViews || [])}
+                                  className="w-3.5 h-3.5 rounded border-neutral-700 accent-primary"
+                                />
+                                Payslip
                               </label>
                             </div>
                           )}
@@ -1267,6 +1283,7 @@ export default function AdminPage() {
                         { id: 'petty-cash', label: 'Petty Cash' },
                         { id: 'time-card', label: 'Time Card' },
                         { id: 'installation-report', label: 'Installation Report' },
+                        { id: 'payslip', label: 'Payslip Center' },
                       ].map(v => {
                         const checked = editEmpAllowedViews.includes(v.id);
                         return (

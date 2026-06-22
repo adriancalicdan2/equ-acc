@@ -5,7 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { format } from 'date-fns';
 import {
   ClipboardList, Download, Loader2, Search, CheckCircle2,
-  AlertCircle, FileSpreadsheet,
+  AlertCircle, FileSpreadsheet, Printer,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -44,7 +44,9 @@ interface InstallReportForm {
   refCO: string;
   items: ItemRow[];
   reportSummary: string;
-  acknowledgedBy: string;
+  aimfRep: string;
+  zeahoRep: string;
+  technicalSup: string;
 }
 
 const emptyForm = (): InstallReportForm => ({
@@ -54,7 +56,9 @@ const emptyForm = (): InstallReportForm => ({
   refCO: '',
   items: INSTALL_ITEMS.map(() => ({ qty: '', remarks: '' })),
   reportSummary: '',
-  acknowledgedBy: '',
+  aimfRep: '',
+  zeahoRep: '',
+  technicalSup: '',
 });
 
 const inputCls =
@@ -70,7 +74,54 @@ function InstallationReportContent() {
   const [searchQuery, setSearchQuery] = useState('');
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
   const [form, setForm] = useState<InstallReportForm>(emptyForm());
+
+  const handlePrintPreview = () => {
+    const element = previewRef.current;
+    if (!element) return;
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      toast.error('Please allow popups to print/download PDF');
+      return;
+    }
+    const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
+      .map(el => el.outerHTML)
+      .join('\n');
+    const content = element.innerHTML;
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Installation-Report-${(form.vessel || 'report').replace(/\s+/g, '_')}</title>
+          ${styles}
+          <style>
+            @page { margin: 0; }
+            body { background: white !important; color: black !important; padding: 2cm !important; margin: 0 !important; }
+            .printable-report { width: 100% !important; max-width: 100% !important; border: none !important; box-shadow: none !important; padding: 0 !important; margin: 0 !important; }
+          </style>
+        </head>
+        <body>
+          <div class="printable-report">${content}</div>
+          <script>
+            Promise.all(Array.from(document.querySelectorAll('link[rel="stylesheet"]')).map(link => {
+              return new Promise(resolve => {
+                link.onload = resolve;
+                link.onerror = resolve;
+                setTimeout(resolve, 1000);
+              });
+            })).then(() => {
+              setTimeout(() => {
+                window.focus();
+                window.print();
+                setTimeout(() => window.close(), 500);
+              }, 500);
+            });
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
 
   const hasAccess =
     isAdmin || (allowedViews && allowedViews.includes('installation-report'));
@@ -475,30 +526,51 @@ function InstallationReportContent() {
 
           <div className="bg-card/60 backdrop-blur-xl border border-border/80 rounded-2xl p-5 shadow-lg space-y-4">
             <h2 className="font-semibold text-sm text-primary">Signatories</h2>
+            {/* 'Acknowledged by:' is a fixed label in the xlsx (B30) */}
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">
+              Acknowledged by:
+            </p>
             <div className="space-y-3">
               <div className="space-y-1.5">
-                <Label className="text-xs font-medium text-muted-foreground">Acknowledged By</Label>
+                <Label className="text-xs font-medium text-muted-foreground">AIMF Tech Corp. Representative</Label>
                 <input
                   className={inputCls}
-                  value={form.acknowledgedBy}
-                  onChange={(e) => setField('acknowledgedBy', e.target.value)}
-                  placeholder="Vessel representative name"
+                  value={form.aimfRep}
+                  onChange={(e) => setField('aimfRep', e.target.value)}
+                  placeholder="Name / signature"
                 />
               </div>
-              <div className="pt-2 space-y-1">
-                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Fixed Parties</p>
-                <div className="flex flex-col gap-1 text-xs text-muted-foreground bg-muted/30 rounded-lg px-3 py-2.5 border border-border/50">
-                  <span>AIMF Tech Corp.</span>
-                  <span>ZEAHO (NANJING)</span>
-                  <span>Technical Superintendent</span>
-                </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-muted-foreground">ZEAHO (NANJING) Representative</Label>
+                <input
+                  className={inputCls}
+                  value={form.zeahoRep}
+                  onChange={(e) => setField('zeahoRep', e.target.value)}
+                  placeholder="Name / signature"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-muted-foreground">Technical Superintendent</Label>
+                <input
+                  className={inputCls}
+                  value={form.technicalSup}
+                  onChange={(e) => setField('technicalSup', e.target.value)}
+                  placeholder="Name / signature"
+                />
               </div>
             </div>
           </div>
         </div>
 
-        {/* ── Download Button ── */}
-        <div className="flex justify-end">
+        {/* ── Actions Row ── */}
+        <div className="flex justify-end gap-3">
+          <Button
+            type="button"
+            onClick={handlePrintPreview}
+            className="h-11 px-6 text-sm font-semibold rounded-xl border border-border bg-transparent text-foreground hover:bg-muted transition-all duration-200 flex items-center gap-2"
+          >
+            <Printer className="w-4 h-4" /> Print Preview
+          </Button>
           <Button
             type="button"
             onClick={handleDownload}
@@ -509,6 +581,101 @@ function InstallationReportContent() {
               ? <><Loader2 className="w-4 h-4 animate-spin" />Generating...</>
               : <><Download className="w-4 h-4" />Download XLSX Report</>}
           </Button>
+        </div>
+
+        {/* ── Bottom Live Preview ── */}
+        <div className="space-y-4 pt-8 border-t border-border/40">
+          <div className="text-xs font-semibold text-muted-foreground tracking-wider uppercase text-center">
+            Installation Report Live Preview
+          </div>
+
+          <div
+            ref={previewRef}
+            className="printable-report bg-white text-neutral-900 border border-neutral-200 rounded-xl p-8 shadow-2xl flex flex-col font-sans max-w-4xl mx-auto w-full text-xs"
+          >
+            {/* Header */}
+            <div className="flex justify-between items-start border-b-2 border-neutral-200 pb-4 mb-6">
+              <div>
+                <h2 className="text-lg font-black uppercase text-neutral-800 tracking-tight">AIMF Technologies Corporation</h2>
+                <p className="text-[10px] text-neutral-500 font-medium">Installation Service Report</p>
+              </div>
+              <div className="text-right">
+                <span className="text-[10px] uppercase font-bold text-neutral-400 block">Status</span>
+                <span className="bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded text-[10px]">Draft</span>
+              </div>
+            </div>
+
+            {/* Metadata Section */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-neutral-50 p-4 rounded-lg border border-neutral-100 mb-6 text-neutral-700">
+              <div>
+                <span className="text-[9px] uppercase font-bold text-neutral-400 block">Vessel Name</span>
+                <span className="font-bold text-neutral-800">{form.vessel || '—'}</span>
+              </div>
+              <div>
+                <span className="text-[9px] uppercase font-bold text-neutral-400 block">Representative</span>
+                <span className="font-semibold text-neutral-800">{form.representative || '—'}</span>
+              </div>
+              <div>
+                <span className="text-[9px] uppercase font-bold text-neutral-400 block">Date</span>
+                <span className="font-semibold text-neutral-800">{form.date || '—'}</span>
+              </div>
+              <div>
+                <span className="text-[9px] uppercase font-bold text-neutral-400 block">Ref C/O</span>
+                <span className="font-semibold text-neutral-800">{form.refCO || '—'}</span>
+              </div>
+            </div>
+
+            {/* Items Table */}
+            <div className="border border-neutral-200 rounded-lg overflow-hidden mb-6">
+              <table className="w-full text-left border-collapse text-neutral-700">
+                <thead>
+                  <tr className="bg-neutral-100 border-b border-neutral-200 text-neutral-600 font-bold uppercase tracking-wider text-[9px]">
+                    <th className="px-4 py-2 w-12 text-center">No.</th>
+                    <th className="px-4 py-2">Install Description</th>
+                    <th className="px-4 py-2 w-32 text-center">Quantity</th>
+                    <th className="px-4 py-2 w-64">Remarks</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-neutral-100 text-xs">
+                  {INSTALL_ITEMS.map((desc, idx) => (
+                    <tr key={idx} className="hover:bg-neutral-50/50">
+                      <td className="px-4 py-2 text-center font-mono text-neutral-400">{idx + 1}</td>
+                      <td className="px-4 py-2 font-medium text-neutral-800">{desc}</td>
+                      <td className="px-4 py-2 text-center font-bold">{form.items[idx]?.qty || '—'}</td>
+                      <td className="px-4 py-2 text-neutral-600 truncate">{form.items[idx]?.remarks || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Summary / Remarks */}
+            <div className="bg-neutral-50 border border-neutral-200 rounded-lg p-4 mb-6">
+              <h4 className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider mb-2">Report Summary / Remarks</h4>
+              <p className="whitespace-pre-wrap text-xs text-neutral-800 leading-relaxed min-h-[4rem]">
+                {form.reportSummary || 'No summary or remarks provided yet.'}
+              </p>
+            </div>
+
+            {/* Signatories */}
+            <div className="border-t border-neutral-100 pt-6">
+              <h4 className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider mb-6 text-center">Acknowledged by</h4>
+              <div className="grid grid-cols-3 gap-8 text-center">
+                <div className="space-y-2">
+                  <div className="border-b border-neutral-300 mx-auto w-40 h-8 font-serif text-sm italic flex items-end justify-center pb-1 text-neutral-800">{form.aimfRep}</div>
+                  <div className="text-[9px] uppercase font-bold text-neutral-500">AIMF Tech Representative</div>
+                </div>
+                <div className="space-y-2">
+                  <div className="border-b border-neutral-300 mx-auto w-40 h-8 font-serif text-sm italic flex items-end justify-center pb-1 text-neutral-800">{form.zeahoRep}</div>
+                  <div className="text-[9px] uppercase font-bold text-neutral-500">ZEAHO Representative</div>
+                </div>
+                <div className="space-y-2">
+                  <div className="border-b border-neutral-300 mx-auto w-40 h-8 font-serif text-sm italic flex items-end justify-center pb-1 text-neutral-800">{form.technicalSup}</div>
+                  <div className="text-[9px] uppercase font-bold text-neutral-500">Technical Superintendent</div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 

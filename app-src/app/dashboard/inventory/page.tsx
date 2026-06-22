@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/firebase/AuthContext';
 import { firestore } from '@/lib/firebase/client';
@@ -25,7 +25,54 @@ interface DeploymentRecord {
 
 export default function InventoryControlPage() {
   const router = useRouter();
+  const previewRef = useRef<HTMLDivElement>(null);
   const { user, displayName, isAdmin, allowedViews, loading } = useAuth();
+
+  const handlePrintPreview = () => {
+    const element = previewRef.current;
+    if (!element) return;
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      toast.error('Please allow popups to print/download PDF');
+      return;
+    }
+    const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
+      .map(el => el.outerHTML)
+      .join('\n');
+    const content = element.innerHTML;
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Inventory-Status-Report</title>
+          ${styles}
+          <style>
+            @page { margin: 0; }
+            body { background: white !important; color: black !important; padding: 2cm !important; margin: 0 !important; }
+            .printable-report { width: 100% !important; max-width: 100% !important; border: none !important; box-shadow: none !important; padding: 0 !important; margin: 0 !important; }
+          </style>
+        </head>
+        <body>
+          <div class="printable-report">${content}</div>
+          <script>
+            Promise.all(Array.from(document.querySelectorAll('link[rel="stylesheet"]')).map(link => {
+              return new Promise(resolve => {
+                link.onload = resolve;
+                link.onerror = resolve;
+                setTimeout(resolve, 1000);
+              });
+            })).then(() => {
+              setTimeout(() => {
+                window.focus();
+                window.print();
+                setTimeout(() => window.close(), 500);
+              }, 500);
+            });
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
 
   // Inventory list and detail overlays states
   const [inventory, setInventory] = useState<any[]>([]);
@@ -455,6 +502,13 @@ export default function InventoryControlPage() {
               />
             </div>
             <Button 
+              onClick={handlePrintPreview}
+              variant="outline"
+              className="h-9 px-4 text-xs font-semibold rounded-lg border-border hover:bg-muted text-foreground bg-transparent flex items-center gap-1.5"
+            >
+              Print Report
+            </Button>
+            <Button 
               onClick={() => setShowAddCustomItemModal(true)}
               className="h-9 px-4 text-xs font-semibold rounded-lg bg-primary text-primary-foreground hover:bg-primary/95 flex items-center gap-1.5"
             >
@@ -562,6 +616,76 @@ export default function InventoryControlPage() {
               </div>
             );
           })}
+        </div>
+
+        {/* Bottom Live Preview */}
+        <div className="space-y-4 pt-8 border-t border-border/40">
+          <div className="text-xs font-semibold text-muted-foreground tracking-wider uppercase text-center">
+            Inventory Stock Status & Assets Report Live Preview
+          </div>
+
+          <div
+            ref={previewRef}
+            className="printable-report bg-white text-neutral-900 border border-neutral-200 rounded-xl p-8 shadow-2xl flex flex-col font-sans max-w-4xl mx-auto w-full text-xs"
+          >
+            {/* Header */}
+            <div className="text-center space-y-1 border-b-2 border-neutral-200 pb-4 mb-6">
+              <h2 className="text-lg font-black uppercase text-neutral-800 tracking-tight">Inventory Stock Ledger & Status Report</h2>
+              <div className="text-sm font-bold text-neutral-700">AIMF Technologies Corporation</div>
+              <div className="text-[10px] text-neutral-500">Date Generated: {format(new Date(), 'MMMM d, yyyy')}</div>
+            </div>
+
+            {/* Inventory table */}
+            <div className="border border-neutral-200 rounded-lg overflow-hidden mb-6">
+              <table className="w-full text-left border-collapse text-neutral-700 text-[10px]">
+                <thead>
+                  <tr className="bg-neutral-100 border-b border-neutral-200 text-neutral-600 font-bold uppercase tracking-wider text-[9px]">
+                    <th className="px-4 py-2">Item Name</th>
+                    <th className="px-4 py-2">Device Code</th>
+                    <th className="px-4 py-2 text-center">Category</th>
+                    <th className="px-4 py-2 text-center w-24">Total In (Arrivals)</th>
+                    <th className="px-4 py-2 text-center w-24">Deployed</th>
+                    <th className="px-4 py-2 text-center w-24">Defective</th>
+                    <th className="px-4 py-2 text-center w-24">Net Available Stock</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-neutral-100 text-xs">
+                  {inventory.map((item) => {
+                    const totalStockIn = (item.arrivalsLog || []).reduce((acc: number, log: any) => acc + log.qty, 0);
+                    const totalDeployed = getDeployedCount(item.id);
+                    const totalDefective = (item.defectiveLog || []).reduce((acc: number, log: any) => acc + log.qty, 0);
+                    const availableStock = totalStockIn - totalDeployed - totalDefective;
+
+                    return (
+                      <tr key={item.id} className="hover:bg-neutral-50/50">
+                        <td className="px-4 py-2 font-medium text-neutral-800">{item.name}</td>
+                        <td className="px-4 py-2 font-mono text-neutral-500">{item.deviceCode}</td>
+                        <td className="px-4 py-2 text-center text-neutral-600 capitalize">{item.category}</td>
+                        <td className="px-4 py-2 text-center">{totalStockIn}</td>
+                        <td className="px-4 py-2 text-center text-blue-600 font-bold">{totalDeployed}</td>
+                        <td className="px-4 py-2 text-center text-red-600 font-bold">{totalDefective}</td>
+                        <td className="px-4 py-2 text-center font-bold text-emerald-600">{availableStock}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Signatures */}
+            <div className="border-t border-neutral-100 pt-6 mt-6">
+              <div className="grid grid-cols-2 gap-16 text-center text-neutral-700">
+                <div className="space-y-2">
+                  <div className="border-b border-neutral-300 mx-auto w-48 h-8 font-serif text-sm italic flex items-end justify-center pb-1 text-neutral-800">System Generated</div>
+                  <div className="text-[9px] uppercase font-bold text-neutral-500">Report Ledger Sync</div>
+                </div>
+                <div className="space-y-2">
+                  <div className="border-b border-neutral-300 mx-auto w-48 h-8"></div>
+                  <div className="text-[9px] uppercase font-bold text-neutral-500">Reviewed By (Inventory Manager)</div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 

@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useFieldArray, useForm } from 'react-hook-form';
 import { format } from 'date-fns';
-import { Plus, Trash2, Download, Loader2, Wallet, Calculator, Search, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Plus, Trash2, Download, Loader2, Wallet, Calculator, Search, CheckCircle2, AlertCircle, Printer } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -144,7 +144,7 @@ function PettyCashContent() {
 
   const { register, control, watch, handleSubmit, reset, setValue, formState: { errors } } = useForm<PettyCashForm>({
     defaultValues: {
-      companyName: 'LEAD TREND MARINE SERVICES CO. LTD.',
+      companyName: 'AIMF Technologies Corporation',
       periodFrom: format(new Date(), 'MM/dd/yyyy'),
       periodTo: format(new Date(), 'MM/dd/yyyy'),
       beginningBalance: '',
@@ -163,8 +163,68 @@ function PettyCashContent() {
   });
 
   const { fields, append, remove } = useFieldArray({ control, name: 'items' });
+  const previewRef = useRef<HTMLDivElement>(null);
   const watchedItems = watch('items');
   const beginningBalance = num(watch('beginningBalance'));
+  const companyName = watch('companyName');
+  const periodFrom = watch('periodFrom');
+  const periodTo = watch('periodTo');
+  const beginningDate = watch('beginningDate');
+  const cashOnHand = watch('cashOnHand');
+  const cashOnHandDate = watch('cashOnHandDate');
+  const amountReplenished = watch('amountReplenished');
+  const replenishmentDate = watch('replenishmentDate');
+  const balanceEndingDate = watch('balanceEndingDate');
+  const preparedBy = watch('preparedBy');
+  const preparedDate = watch('preparedDate');
+  const approvedBy = watch('approvedBy');
+  const approvedDate = watch('approvedDate');
+
+  const handlePrintPreview = () => {
+    const element = previewRef.current;
+    if (!element) return;
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      toast.error('Please allow popups to print/download PDF');
+      return;
+    }
+    const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
+      .map(el => el.outerHTML)
+      .join('\n');
+    const content = element.innerHTML;
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Petty-Cash-Report-${(companyName || 'report').replace(/\s+/g, '_')}</title>
+          ${styles}
+          <style>
+            @page { margin: 0; }
+            body { background: white !important; color: black !important; padding: 2cm !important; margin: 0 !important; }
+            .printable-report { width: 100% !important; max-width: 100% !important; border: none !important; box-shadow: none !important; padding: 0 !important; margin: 0 !important; }
+          </style>
+        </head>
+        <body>
+          <div class="printable-report">${content}</div>
+          <script>
+            Promise.all(Array.from(document.querySelectorAll('link[rel="stylesheet"]')).map(link => {
+              return new Promise(resolve => {
+                link.onload = resolve;
+                link.onerror = resolve;
+                setTimeout(resolve, 1000);
+              });
+            })).then(() => {
+              setTimeout(() => {
+                window.focus();
+                window.print();
+                setTimeout(() => window.close(), 500);
+              }, 500);
+            });
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
 
   const totalGross = watchedItems.reduce((s, i) => s + num(i.gross), 0);
   const availableBalance = beginningBalance - totalGross;
@@ -174,7 +234,7 @@ function PettyCashContent() {
   const handleClear = () => {
     setSelectedReportId('');
     reset({
-      companyName: 'LEAD TREND MARINE SERVICES CO. LTD.',
+      companyName: 'AIMF Technologies Corporation',
       periodFrom: format(new Date(), 'MM/dd/yyyy'),
       periodTo: format(new Date(), 'MM/dd/yyyy'),
       beginningBalance: '',
@@ -195,12 +255,16 @@ function PettyCashContent() {
 
   const handleSaveNewReport = async () => {
     const values = watch();
-    if (!values.companyName) { toast.error('Company Name is required to save'); return; }
     if (!window.confirm('Are you sure you want to save these details?')) return;
     setSaving(true);
     try {
-      const payload = { ...values, createdAt: new Date(), uid: auth?.currentUser?.uid ?? null };
-      const docId = `${values.companyName}_${values.periodFrom}_${values.periodTo}`.trim().replace(/[\/\\?%*:|"<>]/g, '-');
+      const payload = { 
+        ...values, 
+        companyName: 'LEAD TREND MARINE SERVICES CO. LTD.', 
+        createdAt: new Date(), 
+        uid: auth?.currentUser?.uid ?? null 
+      };
+      const docId = `LEAD-TREND_${values.periodFrom}_${values.periodTo}`.trim().replace(/[\/\\?%*:|"<>]/g, '-');
       await setDoc(doc(firestore, 'petty-cash-reports', docId), payload, { merge: true });
       setSelectedReportId(docId);
       toast.success('Petty Cash report saved successfully!');
@@ -212,12 +276,16 @@ function PettyCashContent() {
   const handleUpdateReport = async () => {
     if (!selectedReportId) { toast.error('No report selected to update'); return; }
     const values = watch();
-    if (!values.companyName) { toast.error('Company Name is required'); return; }
     if (!window.confirm('Are you sure you want to update these details?')) return;
     setSaving(true);
     try {
-      const payload = { ...values, createdAt: new Date(), uid: auth?.currentUser?.uid ?? null };
-      const docId = `${values.companyName}_${values.periodFrom}_${values.periodTo}`.trim().replace(/[\/\\?%*:|"<>]/g, '-');
+      const payload = { 
+        ...values, 
+        companyName: 'LEAD TREND MARINE SERVICES CO. LTD.', 
+        createdAt: new Date(), 
+        uid: auth?.currentUser?.uid ?? null 
+      };
+      const docId = `LEAD-TREND_${values.periodFrom}_${values.periodTo}`.trim().replace(/[\/\\?%*:|"<>]/g, '-');
       if (selectedReportId !== docId) {
         try { await deleteDoc(doc(firestore, 'petty-cash-reports', selectedReportId)); } catch {}
       }
@@ -247,7 +315,10 @@ function PettyCashContent() {
     const report = savedReports.find(r => r.id === reportId);
     if (!report) return;
     setSelectedReportId(reportId);
-    reset(report.data);
+    reset({
+      ...report.data,
+      companyName: 'LEAD TREND MARINE SERVICES CO. LTD.'
+    });
     toast.success('Form filled with saved report info!');
   };
 
@@ -257,7 +328,10 @@ function PettyCashContent() {
       const res = await fetch('/api/generate-petty-cash', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
+        body: JSON.stringify({
+          ...data,
+          companyName: 'LEAD TREND MARINE SERVICES CO. LTD.'
+        }),
       });
       if (!res.ok) {
         const err = await res.json();
@@ -380,7 +454,11 @@ function PettyCashContent() {
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             <div className="md:col-span-5 space-y-1.5">
               <Label className="text-xs font-medium text-muted-foreground">Company Name</Label>
-              <Input {...register('companyName')} className={cn(inputCls, 'h-10 text-sm')} />
+              <Input 
+                {...register('companyName')} 
+                readOnly 
+                className={cn(inputCls, 'h-10 text-sm opacity-60 cursor-not-allowed bg-muted')} 
+              />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-muted-foreground">Period From</Label>
@@ -538,19 +616,124 @@ function PettyCashContent() {
           </div>
         </div>
 
-        {/* Generate Button */}
-        <div className="flex justify-end">
-          <Button type="submit" disabled={generating}
-            className="h-11 px-8 text-sm font-semibold rounded-xl bg-blue-600 border-blue-700 text-white hover:bg-blue-500 hover:shadow-[0_0_20px_rgba(59,130,246,0.5)] active:scale-[0.98] transition-all duration-200 flex items-center gap-2">
-            {generating
-              ? <><Loader2 className="w-4 h-4 animate-spin" />Generating...</>
-              : <><Download className="w-4 h-4" />Download XLSX Report</>}
+        {/* Actions Row */}
+        <div className="flex justify-end gap-3">
+          <Button
+            type="button"
+            onClick={handlePrintPreview}
+            className="h-11 px-6 text-sm font-semibold rounded-xl border border-border bg-transparent text-foreground hover:bg-muted transition-all duration-200 flex items-center gap-2"
+          >
+            <Printer className="w-4 h-4" /> Print Preview
           </Button>
+        </div>
+
+        {/* Bottom Live Preview */}
+        <div className="space-y-4 pt-8 border-t border-border/40">
+          <div className="text-xs font-semibold text-muted-foreground tracking-wider uppercase text-center">
+            Petty Cash Report Live Preview
+          </div>
+
+          <div
+            ref={previewRef}
+            className="printable-report bg-white text-neutral-900 border border-neutral-200 rounded-xl p-8 shadow-2xl flex flex-col font-sans max-w-6xl mx-auto w-full text-xs"
+          >
+            {/* Header */}
+            <div className="text-center space-y-1 border-b-2 border-neutral-200 pb-4 mb-6">
+              <h2 className="text-lg font-black uppercase text-neutral-800 tracking-tight">Petty Cash replenishment & expense ledger</h2>
+              <div className="text-sm font-bold text-neutral-700">{companyName || 'LEAD TREND MARINE SERVICES CO. LTD.'}</div>
+              <div className="text-[10px] text-neutral-500">Period: {periodFrom || '—'} to {periodTo || '—'}</div>
+            </div>
+
+            {/* Balances Summary Cards */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 text-neutral-700">
+              <div className="bg-neutral-50 p-3 rounded-lg border border-neutral-100">
+                <span className="text-[9px] uppercase font-bold text-neutral-400 block">Beginning Balance</span>
+                <span className="font-bold text-neutral-800">₱{beginningBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                <span className="text-[9px] text-neutral-400 block mt-1">{beginningDate || '—'}</span>
+              </div>
+              <div className="bg-neutral-50 p-3 rounded-lg border border-neutral-100">
+                <span className="text-[9px] uppercase font-bold text-neutral-400 block">Total Expenses</span>
+                <span className="font-bold text-red-600">₱{totalGross.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+              </div>
+              <div className="bg-neutral-50 p-3 rounded-lg border border-neutral-100">
+                <span className="text-[9px] uppercase font-bold text-neutral-400 block">Available Balance</span>
+                <span className="font-bold text-emerald-600">₱{availableBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+              </div>
+              <div className="bg-neutral-50 p-3 rounded-lg border border-neutral-100">
+                <span className="text-[9px] uppercase font-bold text-neutral-400 block">Replenished Amount</span>
+                <span className="font-bold text-neutral-800">₱{(parseFloat(amountReplenished) || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                <span className="text-[9px] text-neutral-400 block mt-1">{replenishmentDate || '—'}</span>
+              </div>
+            </div>
+
+            {/* Ledger Table */}
+            <div className="border border-neutral-200 rounded-lg overflow-hidden mb-6">
+              <table className="w-full text-left border-collapse text-neutral-700 text-[10px]">
+                <thead>
+                  <tr className="bg-neutral-100 border-b border-neutral-200 text-neutral-600 font-bold uppercase tracking-wider text-[9px]">
+                    <th className="px-2 py-2">Date</th>
+                    <th className="px-2 py-2">Ref #</th>
+                    <th className="px-2 py-2">Payee Name</th>
+                    <th className="px-2 py-2">Particular</th>
+                    <th className="px-2 py-2 text-right">Gross (₱)</th>
+                    <th className="px-2 py-2 text-right">VAT</th>
+                    <th className="px-2 py-2 text-right">Transpo</th>
+                    <th className="px-2 py-2 text-right">Meals</th>
+                    <th className="px-2 py-2 text-right">Freight</th>
+                    <th className="px-2 py-2 text-right">Comm</th>
+                    <th className="px-2 py-2 text-right">Office Sup</th>
+                    <th className="px-2 py-2 text-right">Misc</th>
+                    <th className="px-2 py-2 text-right">Other</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-neutral-100">
+                  {watchedItems.map((item, idx) => (
+                    <tr key={idx} className="hover:bg-neutral-50/50">
+                      <td className="px-2 py-1.5 text-neutral-500">{item.date || '—'}</td>
+                      <td className="px-2 py-1.5 font-mono">{item.referenceNo || '—'}</td>
+                      <td className="px-2 py-1.5 font-medium text-neutral-800 max-w-[80px] truncate">{item.payeeName || '—'}</td>
+                      <td className="px-2 py-1.5 text-neutral-600 max-w-[100px] truncate">{item.particular || '—'}</td>
+                      <td className="px-2 py-1.5 text-right font-bold">₱{(parseFloat(item.gross) || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                      <td className="px-2 py-1.5 text-right text-neutral-500">₱{(parseFloat(item.vat) || 0).toLocaleString('en-US')}</td>
+                      <td className="px-2 py-1.5 text-right text-neutral-500">₱{(parseFloat(item.transpo) || 0).toLocaleString('en-US')}</td>
+                      <td className="px-2 py-1.5 text-right text-neutral-500">₱{(parseFloat(item.meals) || 0).toLocaleString('en-US')}</td>
+                      <td className="px-2 py-1.5 text-right text-neutral-500">₱{(parseFloat(item.freight) || 0).toLocaleString('en-US')}</td>
+                      <td className="px-2 py-1.5 text-right text-neutral-500">₱{(parseFloat(item.communication) || 0).toLocaleString('en-US')}</td>
+                      <td className="px-2 py-1.5 text-right text-neutral-500">₱{(parseFloat(item.officeSupplies) || 0).toLocaleString('en-US')}</td>
+                      <td className="px-2 py-1.5 text-right text-neutral-500">₱{(parseFloat(item.miscellaneous) || 0).toLocaleString('en-US')}</td>
+                      <td className="px-2 py-1.5 text-right text-neutral-500">₱{(parseFloat(item.other) || 0).toLocaleString('en-US')}</td>
+                    </tr>
+                  ))}
+                  <tr className="bg-neutral-50 font-bold border-t border-neutral-200 text-neutral-800">
+                    <td colSpan={4} className="px-2 py-2 text-right">TOTAL EXPENSES:</td>
+                    <td className="px-2 py-2 text-right text-red-600">₱{totalGross.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                    <td colSpan={8} />
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            {/* Footer / Signatories */}
+            <div className="border-t border-neutral-100 pt-6">
+              <div className="grid grid-cols-2 gap-12 text-center">
+                <div className="space-y-2">
+                  <div className="border-b border-neutral-300 mx-auto w-48 h-8 font-serif text-sm italic flex items-end justify-center pb-1 text-neutral-800">{preparedBy}</div>
+                  <div className="text-[9px] uppercase font-bold text-neutral-500">Prepared By</div>
+                  <div className="text-[8px] text-neutral-400">{preparedDate || '—'}</div>
+                </div>
+                <div className="space-y-2">
+                  <div className="border-b border-neutral-300 mx-auto w-48 h-8 font-serif text-sm italic flex items-end justify-center pb-1 text-neutral-800">{approvedBy}</div>
+                  <div className="text-[9px] uppercase font-bold text-neutral-500">Approved By</div>
+                  <div className="text-[8px] text-neutral-400">{approvedDate || '—'}</div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </form>
 
       <footer className="border-t border-border py-6 text-center text-xs text-muted-foreground/50">
-        Petty Cash Report · AIMF Tech. Corp. ©{new Date().getFullYear()}
+        Petty Cash Report · LEAD TREND MARINE SERVICES CO. LTD. ©{new Date().getFullYear()}
       </footer>
     </div>
   );

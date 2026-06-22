@@ -7,7 +7,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { format } from 'date-fns';
 import {
   FileText, Ship, Wifi, Zap, Sun, StickyNote,
-  Download, Loader2, CheckCircle2, ChevronRight, AlertCircle, Search,
+  Download, Loader2, CheckCircle2, ChevronRight, AlertCircle, Search, Printer,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -132,6 +132,53 @@ function EquipmentAccountabilityContent() {
   const [isOpen, setIsOpen] = useState(false);
   const [uploadingToDrive, setUploadingToDrive] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
+
+  const handlePrintPreview = () => {
+    const element = previewRef.current;
+    if (!element) return;
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      toast.error('Please allow popups to print/download PDF');
+      return;
+    }
+    const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
+      .map(el => el.outerHTML)
+      .join('\n');
+    const content = element.innerHTML;
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Equipment-Accountability-${(watch('vesselInfo.vesselName') || 'report').replace(/\s+/g, '_')}</title>
+          ${styles}
+          <style>
+            @page { margin: 0; }
+            body { background: white !important; color: black !important; padding: 2cm !important; margin: 0 !important; }
+            .printable-report { width: 100% !important; max-width: 100% !important; border: none !important; box-shadow: none !important; padding: 0 !important; margin: 0 !important; }
+          </style>
+        </head>
+        <body>
+          <div class="printable-report">${content}</div>
+          <script>
+            Promise.all(Array.from(document.querySelectorAll('link[rel="stylesheet"]')).map(link => {
+              return new Promise(resolve => {
+                link.onload = resolve;
+                link.onerror = resolve;
+                setTimeout(resolve, 1000);
+              });
+            })).then(() => {
+              setTimeout(() => {
+                window.focus();
+                window.print();
+                setTimeout(() => window.close(), 500);
+              }, 500);
+            });
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
 
   const hasAccess = isAdmin || (allowedViews && allowedViews.includes('equipment-accountability'));
 
@@ -379,21 +426,21 @@ function EquipmentAccountabilityContent() {
       fd.append('vesselName', values.vesselInfo.vesselName);
       fd.append('installationDate', values.vesselInfo.installationDate || '');
       fd.append('leadEngineer', values.vesselInfo.leadEngineer || '');
-      fd.append('flsCapacitanceQty', values.flsCapacitance?.qty || '1');
+      fd.append('flsCapacitanceQty', capSns.some(s => s.trim() !== '') ? (values.flsCapacitance?.qty || '1') : '0');
       fd.append('flsCapacitanceTank', values.flsCapacitance?.tankAssigned || '');
       fd.append('flsCapacitanceSN', values.flsCapacitance?.serialNumber || '');
       fd.append('flsCapacitanceStatus', values.flsCapacitance?.calibrationStatus || 'good');
-      fd.append('flsFloaterQty', String(floaterQty * 2));
+      fd.append('flsFloaterQty', floaterSns.some(s => s.trim() !== '') ? String(floaterQty * 2) : '0');
       fd.append('flsFloaterTank', values.flsFloater?.tankAssigned || '');
       fd.append('flsFloaterSN', values.flsFloater?.serialNumber || '');
       fd.append('flsFloaterStatus', values.flsFloater?.calibrationStatus || 'good');
-      fd.append('networkQty', values.network?.qty || '1');
+      fd.append('networkQty', networkSns.some(s => s.trim() !== '') ? (values.network?.qty || '1') : '0');
       fd.append('networkSN', values.network?.serialNumber || '');
       fd.append('networkSignalStatus', values.network?.signalStatus || 'excellent');
-      fd.append('engineQty', values.engine?.qty || '1');
+      fd.append('engineQty', engineSns.some(s => s.trim() !== '') ? (values.engine?.qty || '1') : '0');
       fd.append('engineConnected', values.engine?.connectedEngines || '');
       fd.append('engineSN', values.engine?.serialNumber || '');
-      fd.append('solarQty', values.solar?.qty || '1');
+      fd.append('solarQty', solarSns.some(s => s.trim() !== '') ? (values.solar?.qty || '1') : '0');
       fd.append('solarLocation', values.solar?.installationLocation || '');
       fd.append('solarSN', values.solar?.serialNumber || '');
       fd.append('solarPowerStatus', values.solar?.powerStatus || 'fully_charged');
@@ -418,21 +465,21 @@ function EquipmentAccountabilityContent() {
       fd.append('vesselName', values.vesselInfo.vesselName);
       fd.append('installationDate', values.vesselInfo.installationDate);
       fd.append('leadEngineer', values.vesselInfo.leadEngineer);
-      fd.append('flsCapacitanceQty', values.flsCapacitance.qty);
+      fd.append('flsCapacitanceQty', capSns.some(s => s.trim() !== '') ? values.flsCapacitance.qty : '0');
       fd.append('flsCapacitanceTank', values.flsCapacitance.tankAssigned);
       fd.append('flsCapacitanceSN', values.flsCapacitance.serialNumber);
       fd.append('flsCapacitanceStatus', values.flsCapacitance.calibrationStatus);
-      fd.append('flsFloaterQty', String(floaterQty * 2));
+      fd.append('flsFloaterQty', floaterSns.some(s => s.trim() !== '') ? String(floaterQty * 2) : '0');
       fd.append('flsFloaterTank', values.flsFloater.tankAssigned);
       fd.append('flsFloaterSN', values.flsFloater.serialNumber);
       fd.append('flsFloaterStatus', values.flsFloater.calibrationStatus);
-      fd.append('networkQty', values.network.qty);
+      fd.append('networkQty', networkSns.some(s => s.trim() !== '') ? values.network.qty : '0');
       fd.append('networkSN', values.network.serialNumber);
       fd.append('networkSignalStatus', values.network.signalStatus);
-      fd.append('engineQty', values.engine.qty);
+      fd.append('engineQty', engineSns.some(s => s.trim() !== '') ? values.engine.qty : '0');
       fd.append('engineConnected', values.engine.connectedEngines);
       fd.append('engineSN', values.engine.serialNumber);
-      fd.append('solarQty', values.solar.qty);
+      fd.append('solarQty', solarSns.some(s => s.trim() !== '') ? values.solar.qty : '0');
       fd.append('solarLocation', values.solar.installationLocation);
       fd.append('solarSN', values.solar.serialNumber);
       fd.append('solarPowerStatus', values.solar.powerStatus);
@@ -535,9 +582,7 @@ function EquipmentAccountabilityContent() {
               )}
             </div>
           </div>
-
           <hr className="border-border/40" />
-
           {/* Action Buttons */}
           <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3 w-full">
             <Button type="button" variant="outline" onClick={handleClear} disabled={loading || saving} className="h-10 px-4 text-xs font-semibold rounded-lg bg-slate-600 border-slate-700 text-white hover:bg-slate-500 w-full sm:w-auto">Clear Form</Button>
@@ -552,12 +597,15 @@ function EquipmentAccountabilityContent() {
                   <svg className="w-4 h-4 mr-1.5" viewBox="0 0 24 24" fill="none"><path fill="#0066da" d="M19.38 17h-11.7l-3.32-6h11.7l3.32 6z"/><path fill="#00ac47" d="M9.1 17l6.02-10.87h5.83l-6.02 10.87h-5.83z"/><path fill="#ffba00" d="M3.82 11l6.02-10.87h5.83l-6.02 10.87h-5.83z"/></svg>
                   Upload to Drive</>}
               </Button>
+              <Button type="button" onClick={handlePrintPreview} className="h-10 px-4 text-xs font-semibold rounded-lg flex items-center justify-center border border-border bg-transparent text-foreground hover:bg-muted w-full sm:w-auto">
+                <Printer className="w-3.5 h-3.5 mr-1.5" /> Print Preview
+              </Button>
               <Button type="submit" disabled={loading || saving || uploadingToDrive} className="h-10 px-5 text-xs font-semibold rounded-lg flex items-center justify-center bg-blue-600 border-blue-700 text-white hover:bg-blue-500 w-full sm:w-auto">
                 {loading ? <><Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />Generating...</> : <><Download className="w-3.5 h-3.5 mr-1.5" />Generate & Download</>}
               </Button>
             </div>
           </div>
-
+          
           {/* Copy Selection */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
@@ -781,6 +829,129 @@ function EquipmentAccountabilityContent() {
           <p className="text-sm text-muted-foreground -mt-1">Note any environmental conditions, deviations, or outstanding tasks.</p>
           <Textarea {...register('remarks')} placeholder="Enter remarks here, or leave blank to use: 'Installation done properly'…" rows={4} className={cn(inputCls, 'resize-none')} />
         </SectionCard>
+
+        {/* Bottom Live Preview */}
+        <div className="space-y-4 pt-8 border-t border-border/40">
+          <div className="text-xs font-semibold text-muted-foreground tracking-wider uppercase text-center">
+            Equipment Deployed Accountability Report Live Preview
+          </div>
+
+          <div
+            ref={previewRef}
+            className="printable-report bg-white text-neutral-900 border border-neutral-200 rounded-xl p-8 shadow-2xl flex flex-col font-sans max-w-4xl mx-auto w-full text-xs"
+          >
+            {/* Header */}
+            <div className="flex justify-between items-start border-b-2 border-neutral-200 pb-4 mb-6">
+              <div>
+                <h2 className="text-lg font-black uppercase text-neutral-800 tracking-tight">Equipment Accountability Report</h2>
+                <p className="text-[10px] text-neutral-500 font-medium">Post-Hardware Installation Deployment Records</p>
+              </div>
+              <div className="text-right">
+                <span className="text-[9px] uppercase font-bold text-neutral-400 block">Active Copies</span>
+                <div className="flex gap-1 mt-1 justify-end">
+                  {(watchedCopyTypes || []).map(ct => (
+                    <span key={ct} className="bg-blue-100 text-blue-800 font-bold px-1.5 py-0.5 rounded text-[8px] uppercase">{ct}</span>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Metadata Section */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-neutral-50 p-4 rounded-lg border border-neutral-100 mb-6 text-neutral-700">
+              <div>
+                <span className="text-[9px] uppercase font-bold text-neutral-400 block">Vessel Name / IMO No.</span>
+                <span className="font-bold text-neutral-800 text-sm">{watch('vesselInfo.vesselName') || '—'}</span>
+              </div>
+              <div>
+                <span className="text-[9px] uppercase font-bold text-neutral-400 block">Installation Date</span>
+                <span className="font-semibold text-neutral-800">{watch('vesselInfo.installationDate') || '—'}</span>
+              </div>
+              <div>
+                <span className="text-[9px] uppercase font-bold text-neutral-400 block">Technician / Lead Engineer</span>
+                <span className="font-semibold text-neutral-800">{watch('vesselInfo.leadEngineer') || '—'}</span>
+              </div>
+            </div>
+
+            {/* Deployed Hardware List */}
+            <div className="border border-neutral-200 rounded-lg overflow-hidden mb-6">
+              <table className="w-full text-left border-collapse text-neutral-700">
+                <thead>
+                  <tr className="bg-neutral-100 border-b border-neutral-200 text-neutral-600 font-bold uppercase tracking-wider text-[9px]">
+                    <th className="px-4 py-2">Hardware Category & Device</th>
+                    <th className="px-4 py-2 text-center w-20">Qty</th>
+                    <th className="px-4 py-2">Tanks / Locations Connected</th>
+                    <th className="px-4 py-2">Serial Numbers</th>
+                    <th className="px-4 py-2 w-32">Status / Calibration</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-neutral-100 text-[11px]">
+                  {/* Capacitance */}
+                  <tr>
+                    <td className="px-4 py-2 font-medium text-neutral-800">FLS Capacitance Fuel Sensor (VPS1.2)</td>
+                    <td className="px-4 py-2 text-center font-bold">{capSns.some(s => s.trim() !== '') ? capQty : 0}</td>
+                    <td className="px-4 py-2 text-neutral-600">{watch('flsCapacitance.tankAssigned') || '—'}</td>
+                    <td className="px-4 py-2 font-mono text-neutral-600">{watch('flsCapacitance.serialNumber') || '—'}</td>
+                    <td className="px-4 py-2 text-neutral-600 uppercase font-semibold text-[10px]">{watch('flsCapacitance.calibrationStatus')}</td>
+                  </tr>
+                  {/* Floater */}
+                  <tr>
+                    <td className="px-4 py-2 font-medium text-neutral-800">FLS Floater Fuel Sensor (SP2.0AR)</td>
+                    <td className="px-4 py-2 text-center font-bold">{floaterSns.some(s => s.trim() !== '') ? floaterQty * 2 : 0}</td>
+                    <td className="px-4 py-2 text-neutral-600">{watch('flsFloater.tankAssigned') || '—'}</td>
+                    <td className="px-4 py-2 font-mono text-neutral-600">{watch('flsFloater.serialNumber') || '—'}</td>
+                    <td className="px-4 py-2 text-neutral-600 uppercase font-semibold text-[10px]">{watch('flsFloater.calibrationStatus')}</td>
+                  </tr>
+                  {/* Network NR */}
+                  <tr>
+                    <td className="px-4 py-2 font-medium text-neutral-800">Wireless Network Transmitter (NR)</td>
+                    <td className="px-4 py-2 text-center font-bold">{networkSns.some(s => s.trim() !== '') ? networkQty : 0}</td>
+                    <td className="px-4 py-2 text-neutral-600">—</td>
+                    <td className="px-4 py-2 font-mono text-neutral-600">{watch('network.serialNumber') || '—'}</td>
+                    <td className="px-4 py-2 text-neutral-600 uppercase font-semibold text-[10px]">Signal: {watch('network.signalStatus')}</td>
+                  </tr>
+                  {/* Engine SD */}
+                  <tr>
+                    <td className="px-4 py-2 font-medium text-neutral-800">Working Hours Monitoring Device (SD)</td>
+                    <td className="px-4 py-2 text-center font-bold">{engineSns.some(s => s.trim() !== '') ? engineQty : 0}</td>
+                    <td className="px-4 py-2 text-neutral-600">{watch('engine.connectedEngines') || '—'}</td>
+                    <td className="px-4 py-2 font-mono text-neutral-600">{watch('engine.serialNumber') || '—'}</td>
+                    <td className="px-4 py-2 text-neutral-600 uppercase font-semibold text-[10px]">Operational</td>
+                  </tr>
+                  {/* Solar panel */}
+                  <tr>
+                    <td className="px-4 py-2 font-medium text-neutral-800">Wireless Solar Panel with Power Storage</td>
+                    <td className="px-4 py-2 text-center font-bold">{solarSns.some(s => s.trim() !== '') ? solarQty : 0}</td>
+                    <td className="px-4 py-2 text-neutral-600">{watch('solar.installationLocation') || '—'}</td>
+                    <td className="px-4 py-2 font-mono text-neutral-600">{watch('solar.serialNumber') || '—'}</td>
+                    <td className="px-4 py-2 text-neutral-600 uppercase font-semibold text-[10px]">{watch('solar.powerStatus')}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            {/* Remarks */}
+            <div className="bg-neutral-50 border border-neutral-200 rounded-lg p-4 mb-6">
+              <h4 className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider mb-2">Remarks & Exceptions</h4>
+              <p className="whitespace-pre-wrap text-xs text-neutral-800 leading-relaxed min-h-[3rem]">
+                {watch('remarks') || 'Installation done properly.'}
+              </p>
+            </div>
+
+            {/* Sign-off / Signatures */}
+            <div className="border-t border-neutral-100 pt-6">
+              <div className="grid grid-cols-2 gap-16 text-center text-neutral-700">
+                <div className="space-y-2">
+                  <div className="border-b border-neutral-300 mx-auto w-48 h-8 font-serif text-sm italic flex items-end justify-center pb-1 text-neutral-800">{watch('vesselInfo.leadEngineer')}</div>
+                  <div className="text-[9px] uppercase font-bold text-neutral-500">Released / Installed By (Technician)</div>
+                </div>
+                <div className="space-y-2">
+                  <div className="border-b border-neutral-300 mx-auto w-48 h-8"></div>
+                  <div className="text-[9px] uppercase font-bold text-neutral-500">Received By (Vessel Representative)</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </form>
 
       <footer className="border-t border-border py-6 text-center text-xs text-muted-foreground/50">

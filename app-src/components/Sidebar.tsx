@@ -42,6 +42,12 @@ const VIEWS = [
     href: '/dashboard/installation-report',
   },
   {
+    id: 'payslip',
+    label: 'Payslip Center',
+    icon: Wallet,
+    href: '/dashboard/payslip',
+  },
+  {
     id: 'admin',
     label: 'Admin Console',
     icon: Shield,

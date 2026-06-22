@@ -25,37 +25,43 @@ export async function POST(req: NextRequest) {
       refCO,
       items = [], // Array of { qty: string, remarks: string } — 9 items matching INSTALL_ITEMS
       reportSummary,
-      acknowledgedBy,
+      aimfRep,      // AIMF Tech Corp signatory
+      zeahoRep,     // ZEAHO (NANJING) signatory
+      technicalSup, // Technical Superintendent signatory
     } = data;
 
     // Read the template
     const templatePath = path.join(process.cwd(), 'public', 'templates', 'AIMF_ Installation Report.xlsx');
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.readFile(templatePath);
-    const ws = workbook.getWorksheet(1);
-    if (!ws) throw new Error('Worksheet not found in template');
+    // Fill all sheets in the workbook (Report, NARRA)
+    workbook.eachSheet((ws) => {
+      // Header fields — write label+value into the same merged cell
+      if (vessel)         ws.getCell('A6').value = 'Vessel: ' + vessel;
+      if (representative) ws.getCell('A7').value = 'AIMF I.T Representative: ' + representative;
+      if (date)           ws.getCell('K9').value = 'Date: ' + date;
+      if (refCO)          ws.getCell('L10').value = refCO;
 
-    // Header fields
-    if (vessel)         ws.getCell('H6').value = vessel;
-    if (representative) ws.getCell('H7').value = representative;
-    if (date)           ws.getCell('L9').value = date;
-    if (refCO)          ws.getCell('L10').value = refCO;
+      // Install items — rows 13 to 21 (9 items)
+      // Note: row 13 has a different merge layout — qty master is I13, rows 14-21 use H{row}
+      items.forEach((item: { qty: string; remarks: string }, idx: number) => {
+        const row = 13 + idx;
+        if (row > 21) return;
+        const qtyCell = row === 13 ? 'I13' : `H${row}`;
+        if (item.qty)     ws.getCell(qtyCell).value = item.qty;
+        if (item.remarks) ws.getCell(`K${row}`).value = item.remarks;
+      });
 
-    // Install items — rows 13 to 21 (9 items)
-    items.forEach((item: { qty: string; remarks: string }, idx: number) => {
-      const row = 13 + idx;
-      if (row > 21) return;
-      if (item.qty)     ws.getCell(`H${row}`).value = item.qty;
-      if (item.remarks) ws.getCell(`K${row}`).value = item.remarks;
+      // Report summary — write to the merged summary area (rows 24–28, col A)
+      if (reportSummary) {
+        ws.getCell('A25').value = reportSummary;
+      }
+
+      // Signatories — each goes into the signature line (row 32) above their company label (row 33)
+      if (aimfRep)      ws.getCell('A32').value = aimfRep;
+      if (zeahoRep)     ws.getCell('E32').value = zeahoRep;
+      if (technicalSup) ws.getCell('K32').value = technicalSup;
     });
-
-    // Report summary — write to the merged summary area (rows 24–28, col A)
-    if (reportSummary) {
-      ws.getCell('A25').value = reportSummary;
-    }
-
-    // Acknowledged by
-    if (acknowledgedBy) ws.getCell('B32').value = acknowledgedBy;
 
     // Write to buffer
     const buffer = await workbook.xlsx.writeBuffer();
