@@ -56,7 +56,7 @@ export const accountabilityFormSchema = z.object({
   solar: solarSchema,
   remarks: z.string().optional().default(''),
   signoff: signoffSchema.optional(),
-  copyTypes: z.array(z.enum(['aimf', 'vessel', 'vessel_owner'])).min(1, 'Select at least one copy type'),
+  copyTypes: z.array(z.enum(['aimf', 'vessel', 'vessel_owner', 'likas'])).min(1, 'Select at least one copy type'),
 });
 
 export type AccountabilityFormValues = z.input<typeof accountabilityFormSchema>;

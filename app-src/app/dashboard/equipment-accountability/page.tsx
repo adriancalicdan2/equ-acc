@@ -29,6 +29,7 @@ const COPY_OPTIONS: { value: CopyType; label: string; desc: string }[] = [
   { value: 'aimf', label: 'AIMF Copy', desc: 'For AIMF Tech. Corp. records' },
   { value: 'vessel', label: 'Vessel Copy', desc: 'For the vessel\'s own files' },
   { value: 'vessel_owner', label: 'Vessel Owner Copy', desc: 'For the vessel owner' },
+  { value: 'likas', label: 'Likas Copy', desc: 'For Likas office records' },
 ];
 
 const SECTIONS = [
@@ -130,7 +131,6 @@ function EquipmentAccountabilityContent() {
   const [selectedReportId, setSelectedReportId] = useState<string>('');
   const [vesselSearchQuery, setVesselSearchQuery] = useState('');
   const [isOpen, setIsOpen] = useState(false);
-  const [uploadingToDrive, setUploadingToDrive] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
 
@@ -461,46 +461,6 @@ function EquipmentAccountabilityContent() {
     }
   }, [reportIdParam, savedReports]);
 
-  const handleUploadToGoogleDrive = async () => {
-    const values = watch();
-    if (!values.vesselInfo?.vesselName) { toast.error('Vessel Name / IMO No. is required to upload reports'); return; }
-    if (!values.copyTypes || values.copyTypes.length === 0) { toast.error('Select at least one copy type to generate'); return; }
-    setUploadingToDrive(true);
-    const toastId = toast.loading('Generating and uploading documents directly to Google Drive...');
-    try {
-      const fd = new FormData();
-      fd.append('vesselName', values.vesselInfo.vesselName);
-      fd.append('installationDate', values.vesselInfo.installationDate || '');
-      fd.append('leadEngineer', values.vesselInfo.leadEngineer || '');
-      fd.append('flsCapacitanceQty', capSns.some(s => s.trim() !== '') ? (values.flsCapacitance?.qty || '1') : '0');
-      fd.append('flsCapacitanceTank', values.flsCapacitance?.tankAssigned || '');
-      fd.append('flsCapacitanceSN', values.flsCapacitance?.serialNumber || '');
-      fd.append('flsCapacitanceStatus', values.flsCapacitance?.calibrationStatus || 'good');
-      fd.append('flsFloaterQty', floaterSns.some(s => s.trim() !== '') ? String(floaterQty * 2) : '0');
-      fd.append('flsFloaterTank', values.flsFloater?.tankAssigned || '');
-      fd.append('flsFloaterSN', values.flsFloater?.serialNumber || '');
-      fd.append('flsFloaterStatus', values.flsFloater?.calibrationStatus || 'good');
-      fd.append('networkQty', networkSns.some(s => s.trim() !== '') ? (values.network?.qty || '1') : '0');
-      fd.append('networkSN', values.network?.serialNumber || '');
-      fd.append('networkSignalStatus', values.network?.signalStatus || 'excellent');
-      fd.append('engineQty', engineSns.some(s => s.trim() !== '') ? (values.engine?.qty || '1') : '0');
-      fd.append('engineConnected', values.engine?.connectedEngines || '');
-      fd.append('engineSN', values.engine?.serialNumber || '');
-      fd.append('solarQty', solarSns.some(s => s.trim() !== '') ? (values.solar?.qty || '1') : '0');
-      fd.append('solarLocation', values.solar?.installationLocation || '');
-      fd.append('solarSN', values.solar?.serialNumber || '');
-      fd.append('solarPowerStatus', values.solar?.powerStatus || 'fully_charged');
-      fd.append('remarks', values.remarks?.trim() || 'Installation done properly');
-      fd.append('copyTypes', JSON.stringify(values.copyTypes));
-      fd.append('uploadToDrive', 'true');
-      const res = await fetch('/api/generate-docx', { method: 'POST', body: fd });
-      if (!res.ok) { const err = await res.json(); throw new Error(err.error ?? 'Background generation/upload failed'); }
-      const data = await res.json();
-      toast.success('Uploaded directly to Google Drive!', { id: toastId, description: `Vessel folder "${data.folderName}" created successfully.`, action: { label: 'Open Folder', onClick: () => window.open(data.folderUrl, '_blank') }, duration: 10000 });
-    } catch (e: any) {
-      toast.error(e.message || 'Failed to upload to Google Drive', { id: toastId });
-    } finally { setUploadingToDrive(false); }
-  };
 
   const onSubmit = async (rawValues: AccountabilityFormValues) => {
     const values = rawValues as any;
@@ -638,18 +598,13 @@ function EquipmentAccountabilityContent() {
                   {saving ? <><Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />Saving...</> : <><CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />Save as New</>}
                 </Button>
               )}
-              <Button type="button" onClick={handleUploadToGoogleDrive} disabled={loading || saving || uploadingToDrive} className="h-10 px-5 text-xs font-semibold rounded-lg flex items-center justify-center bg-teal-600 border-teal-700 text-white hover:bg-teal-500 w-full sm:w-auto">
-                {uploadingToDrive ? <><Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />Uploading...</> : <>
-                  <svg className="w-4 h-4 mr-1.5" viewBox="0 0 24 24" fill="none"><path fill="#0066da" d="M19.38 17h-11.7l-3.32-6h11.7l3.32 6z"/><path fill="#00ac47" d="M9.1 17l6.02-10.87h5.83l-6.02 10.87h-5.83z"/><path fill="#ffba00" d="M3.82 11l6.02-10.87h5.83l-6.02 10.87h-5.83z"/></svg>
-                  Upload to Drive</>}
-              </Button>
               <Button type="button" onClick={handleDownloadPDF} className="h-10 px-4 text-xs font-semibold rounded-lg flex items-center justify-center bg-blue-600 border border-blue-700 text-white hover:bg-blue-500 w-full sm:w-auto">
                 <Download className="w-3.5 h-3.5 mr-1.5" /> Download PDF
               </Button>
               <Button type="button" onClick={handlePrintPreview} className="h-10 px-4 text-xs font-semibold rounded-lg flex items-center justify-center border border-border bg-transparent text-foreground hover:bg-muted w-full sm:w-auto">
                 <Printer className="w-3.5 h-3.5 mr-1.5" /> Print Preview
               </Button>
-              <Button type="submit" disabled={loading || saving || uploadingToDrive} className="h-10 px-5 text-xs font-semibold rounded-lg flex items-center justify-center bg-blue-600 border-blue-700 text-white hover:bg-blue-500 w-full sm:w-auto">
+              <Button type="submit" disabled={loading || saving} className="h-10 px-5 text-xs font-semibold rounded-lg flex items-center justify-center bg-blue-600 border-blue-700 text-white hover:bg-blue-500 w-full sm:w-auto">
                 {loading ? <><Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />Generating...</> : <><Download className="w-3.5 h-3.5 mr-1.5" />Generate & Download</>}
               </Button>
             </div>

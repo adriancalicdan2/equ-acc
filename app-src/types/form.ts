@@ -1,4 +1,4 @@
-export type CopyType = 'aimf' | 'vessel' | 'vessel_owner';
+export type CopyType = 'aimf' | 'vessel' | 'vessel_owner' | 'likas';
 
 export type CalibrationStatus = 'good' | 'defective';
 export type SignalStatus = 'excellent' | 'good' | 'poor';

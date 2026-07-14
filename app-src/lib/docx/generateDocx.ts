@@ -10,6 +10,7 @@ const COPY_LABEL: Record<CopyType, string> = {
   aimf: 'AIMF Copy',
   vessel: 'Vessel Copy',
   vessel_owner: 'Vessel Owner Copy',
+  likas: 'Likas Copy',
 };
 
 // Maps copy type to source docx filename (in the root workspace)
@@ -17,6 +18,7 @@ const SOURCE_DOCX: Record<CopyType, string> = {
   aimf: 'EQUIPMENT ACCOUNTABILITY - AIMF.docx',
   vessel: 'EQUIPMENT ACCOUNTABILITY - Vessel.docx',
   vessel_owner: 'EQUIPMENT ACCOUNTABILITY - Vessel Owner.docx',
+  likas: 'EQUIPMENT ACCOUNTABILITY - Likas.docx',
 };
 
 // Maps copy type to the exact case-sensitive compiled template file name
@@ -24,6 +26,7 @@ const TEMPLATE_FILENAMES: Record<CopyType, string> = {
   aimf: 'EQUIPMENT ACCOUNTABILITY - AIMF.docx',
   vessel: 'EQUIPMENT ACCOUNTABILITY - Vessel.docx',
   vessel_owner: 'EQUIPMENT ACCOUNTABILITY - Vessel Owner.docx',
+  likas: 'EQUIPMENT ACCOUNTABILITY - Likas.docx',
 };
 
 function getTemplatePath(copyType: CopyType): string {
