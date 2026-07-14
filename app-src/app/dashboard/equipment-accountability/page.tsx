@@ -442,7 +442,10 @@ function EquipmentAccountabilityContent() {
     const report = savedReports.find(r => r.id === reportId);
     if (!report) return;
     setSelectedReportId(reportId);
-    reset(report.data);
+    reset({
+      ...report.data,
+      copyTypes: ['aimf', 'vessel', 'vessel_owner', 'likas']
+    });
     setCapSns(report.data.flsCapacitance?.serialNumber?.split(', ') || ['']);
     setCapTanks(report.data.flsCapacitance?.tankAssigned?.split(', ') || ['']);
     setFloaterSns(report.data.flsFloater?.serialNumber?.split(', ') || ['']);
