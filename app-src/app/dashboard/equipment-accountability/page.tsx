@@ -277,7 +277,7 @@ function EquipmentAccountabilityContent() {
   const { register, handleSubmit, watch, setValue, reset, formState: { errors } } = useForm<AccountabilityFormValues>({
     resolver: zodResolver(accountabilityFormSchema),
     defaultValues: {
-      copyTypes: ['aimf', 'vessel', 'vessel_owner'],
+      copyTypes: ['aimf', 'vessel', 'vessel_owner', 'likas'],
       vesselInfo: { vesselName: '', installationDate: '', leadEngineer: '' },
       flsCapacitance: { qty: '1', tankAssigned: '', serialNumber: '', calibrationStatus: 'good' },
       flsFloater: { qty: '1', tankAssigned: '', serialNumber: '', calibrationStatus: 'good' },
@@ -364,7 +364,7 @@ function EquipmentAccountabilityContent() {
   const handleClear = () => {
     setSelectedReportId('');
     reset({
-      copyTypes: ['aimf', 'vessel', 'vessel_owner'],
+      copyTypes: ['aimf', 'vessel', 'vessel_owner', 'likas'],
       vesselInfo: { vesselName: '', installationDate: '', leadEngineer: '' },
       flsCapacitance: { qty: '1', tankAssigned: '', serialNumber: '', calibrationStatus: 'good' },
       flsFloater: { qty: '1', tankAssigned: '', serialNumber: '', calibrationStatus: 'good' },
