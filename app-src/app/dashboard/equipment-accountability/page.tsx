@@ -180,18 +180,49 @@ function EquipmentAccountabilityContent() {
     }
   };
 
+  const COPY_LABELS: Record<string, string> = {
+    aimf: 'AIMF Copy',
+    vessel: 'Vessel Copy',
+    vessel_owner: 'Vessel Owner Copy',
+    likas: 'Likas Copy',
+  };
+
   const handlePrintPreview = () => {
     const element = previewRef.current;
     if (!element) return;
+
+    const selectedCopies = watchedCopyTypes ?? [];
+    if (selectedCopies.length === 0) {
+      toast.error('Please select at least one copy type to print.');
+      return;
+    }
+
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
       toast.error('Please allow popups to print/download PDF');
       return;
     }
+
     const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
       .map(el => el.outerHTML)
       .join('\n');
-    const content = element.innerHTML;
+
+    // Build one page per selected copy type
+    const pages = selectedCopies.map((ct, idx) => {
+      // Clone the preview content and replace the badge area with just this copy's label
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = element.innerHTML;
+
+      // Find the badge container and replace its content with the single copy label
+      const badgeContainer = tempDiv.querySelector('[data-copy-badges]');
+      if (badgeContainer) {
+        badgeContainer.innerHTML = `<span style="background:#dbeafe;color:#1e40af;font-weight:700;padding:2px 6px;border-radius:4px;font-size:9px;text-transform:uppercase;">${COPY_LABELS[ct] ?? ct}</span>`;
+      }
+
+      const isLast = idx === selectedCopies.length - 1;
+      return `<div class="printable-report" style="page-break-after: ${isLast ? 'avoid' : 'always'};">${tempDiv.innerHTML}</div>`;
+    }).join('\n');
+
     printWindow.document.write(`
       <html>
         <head>
@@ -204,7 +235,7 @@ function EquipmentAccountabilityContent() {
           </style>
         </head>
         <body>
-          <div class="printable-report">${content}</div>
+          ${pages}
           <script>
             Promise.all(Array.from(document.querySelectorAll('link[rel="stylesheet"]')).map(link => {
               return new Promise(resolve => {
@@ -219,7 +250,7 @@ function EquipmentAccountabilityContent() {
                 setTimeout(() => window.close(), 500);
               }, 500);
             });
-          </script>
+          <\/script>
         </body>
       </html>
     `);
@@ -855,7 +886,7 @@ function EquipmentAccountabilityContent() {
               </div>
               <div className="text-right">
                 <span className="text-[9px] uppercase font-bold text-neutral-400 block">Active Copies</span>
-                <div className="flex gap-1 mt-1 justify-end">
+                <div data-copy-badges className="flex gap-1 mt-1 justify-end">
                   {(watchedCopyTypes || []).map(ct => (
                     <span key={ct} className="bg-blue-100 text-blue-800 font-bold px-1.5 py-0.5 rounded text-[8px] uppercase">{ct}</span>
                   ))}
