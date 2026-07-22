@@ -23,6 +23,8 @@ import { cn } from '@/lib/utils';
 import { firestore, auth } from '@/lib/firebase/client';
 import { useAuth } from '@/lib/firebase/AuthContext';
 import { collection, onSnapshot, query, orderBy, doc, setDoc, deleteDoc, where } from 'firebase/firestore';
+import { EquipmentCodeScanner } from '@/components/form/EquipmentCodeScanner';
+import { classifyEquipmentSerial, FloaterType, nextEmptyIndex, nextFloaterIndex } from '@/lib/equipmentScanner';
 
 
 const COPY_OPTIONS: { value: CopyType; label: string; desc: string }[] = [
@@ -368,6 +370,75 @@ function EquipmentAccountabilityContent() {
     setValue(formKey, next.filter(Boolean).join(', '), { shouldValidate: true });
   };
 
+  const handleEquipmentScan = (serial: string, floaterType?: FloaterType): boolean => {
+    const classified = classifyEquipmentSerial(serial);
+    if (!classified) {
+      toast.error('Unknown device code. Expected SP1, S2, NR, SD, or Z.');
+      return false;
+    }
+
+    const normalized = classified.serial.toLowerCase();
+    const currentSerials = [...capSns, ...floaterSns, ...networkSns, ...engineSns, ...solarSns];
+    if (currentSerials.some(value => value.trim().toLowerCase() === normalized)) {
+      toast.error(`Serial number "${classified.serial}" is already in this form.`);
+      return false;
+    }
+
+    for (const report of savedReports) {
+      if (report.id === selectedReportId) continue;
+      const existing = getAllSerialNumbers(report.data).find(item => item.sn.trim().toLowerCase() === normalized);
+      if (existing) {
+        toast.error(`Serial number "${classified.serial}" is already assigned to vessel "${report.vesselName}".`);
+        return false;
+      }
+    }
+
+    const addStandardSerial = (
+      values: string[],
+      setValues: React.Dispatch<React.SetStateAction<string[]>>,
+      visibleCount: number,
+      formKey: 'flsCapacitance.serialNumber' | 'network.serialNumber' | 'engine.serialNumber' | 'solar.serialNumber',
+      quantityKey: 'flsCapacitance.qty' | 'network.qty' | 'engine.qty' | 'solar.qty',
+    ) => {
+      const destination = nextEmptyIndex(values, visibleCount);
+      const next = [...values];
+      while (next.length <= destination.index) next.push('');
+      next[destination.index] = classified.serial;
+      setValues(next);
+      if (destination.expand) setValue(quantityKey, String(visibleCount + 1), { shouldValidate: true });
+      setValue(formKey, next.filter(Boolean).join(', '), { shouldValidate: true });
+    };
+
+    if (classified.category === 'capacitance') {
+      addStandardSerial(capSns, setCapSns, capQty, 'flsCapacitance.serialNumber', 'flsCapacitance.qty');
+    } else if (classified.category === 'floater') {
+      if (!floaterType) {
+        toast.error('Choose AM or AR for this floater.');
+        return false;
+      }
+      const destination = nextFloaterIndex(floaterSns, floaterQty, floaterType);
+      const next = [...floaterSns];
+      while (next.length <= destination.index) next.push('');
+      next[destination.index] = classified.serial;
+      setFloaterSns(next);
+      if (destination.expand) setValue('flsFloater.qty', String(floaterQty + 1), { shouldValidate: true });
+      setValue('flsFloater.serialNumber', next.filter(Boolean).join(', '), { shouldValidate: true });
+    } else if (classified.category === 'network') {
+      addStandardSerial(networkSns, setNetworkSns, networkQty, 'network.serialNumber', 'network.qty');
+    } else if (classified.category === 'engine') {
+      addStandardSerial(engineSns, setEngineSns, engineQty, 'engine.serialNumber', 'engine.qty');
+    } else {
+      addStandardSerial(solarSns, setSolarSns, solarQty, 'solar.serialNumber', 'solar.qty');
+    }
+
+    toast.success(`${classified.serial} added`, {
+      description: classified.category === 'floater' ? `${classified.label} (${floaterType})` : classified.label,
+    });
+    const sectionId = classified.category === 'capacitance' || classified.category === 'floater' ? 'fls' : classified.category;
+    window.setTimeout(() => document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+    return true;
+  };
+
   const validateOddEvenSns = (values: any): boolean => {
     return true;
   };
@@ -574,6 +645,14 @@ function EquipmentAccountabilityContent() {
 
       {/* Form */}
       <form onSubmit={handleSubmit(onSubmit)} className="max-w-5xl mx-auto px-4 pb-24 space-y-6">
+
+        <div className="bg-card/60 backdrop-blur-xl border border-border/80 rounded-2xl p-5 shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <p className="font-semibold text-sm">Add a device by scanning its label</p>
+            <p className="text-xs text-muted-foreground mt-1">SP1, S2, NR, SD, and Z serials go to the correct section automatically.</p>
+          </div>
+          <EquipmentCodeScanner disabled={loading || saving} onScan={handleEquipmentScan} />
+        </div>
 
         {/* Controls */}
         <div className="bg-card/60 backdrop-blur-xl border border-border/80 rounded-2xl p-5 shadow-lg space-y-5">
