@@ -8,12 +8,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { classifyEquipmentSerial, FloaterType } from '@/lib/equipmentScanner';
 
-type BarcodeDetectorInstance = {
-  detect: (source: HTMLVideoElement) => Promise<Array<{ rawValue?: string }>>;
-};
-
-type BarcodeDetectorConstructor = new () => BarcodeDetectorInstance;
-
 export function EquipmentCodeScanner({ disabled, onScan }: {
   disabled?: boolean;
   onScan: (serial: string, floaterType?: FloaterType) => boolean;
@@ -64,39 +58,39 @@ export function EquipmentCodeScanner({ disabled, onScan }: {
 
   useEffect(() => {
     if (!open) return;
-    let stream: MediaStream | null = null;
-    let timer: ReturnType<typeof setInterval> | null = null;
+    let controls: { stop: () => void } | null = null;
     let cancelled = false;
     const videoElement = videoRef.current;
 
     const startCamera = async () => {
-      const Detector = (window as Window & { BarcodeDetector?: BarcodeDetectorConstructor }).BarcodeDetector;
-      if (!Detector || !navigator.mediaDevices?.getUserMedia) {
+      if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
         setCameraState('unsupported');
         return;
       }
+      if (!videoElement) return;
       setCameraState('starting');
       try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: 'environment' } },
-          audio: false,
-        });
-        if (cancelled || !videoElement) return;
-        videoElement.srcObject = stream;
-        await videoElement.play();
-        setCameraState('active');
-        const detector = new Detector();
-        timer = setInterval(async () => {
-          if (!videoElement || videoElement.readyState < 2 || pendingFloaterRef.current) return;
-          try {
-            const codes = await detector.detect(videoElement);
-            const value = codes[0]?.rawValue?.trim();
+        const { BrowserMultiFormatReader } = await import('@zxing/browser');
+        const reader = new BrowserMultiFormatReader();
+        const scannerControls = await reader.decodeFromConstraints(
+          { video: { facingMode: { ideal: 'environment' } }, audio: false },
+          videoElement,
+          result => {
+            if (!result || pendingFloaterRef.current) return;
+            const value = result.getText().trim();
             if (!value || value === lastCameraValueRef.current) return;
             lastCameraValueRef.current = value;
             acceptValue(value);
-          } catch { /* Continue with the next camera frame. */ }
-        }, 350);
+          },
+        );
+        controls = scannerControls;
+        if (cancelled) {
+          scannerControls.stop();
+          return;
+        }
+        setCameraState('active');
       } catch {
+        if (cancelled) return;
         setCameraState('denied');
       }
     };
@@ -104,8 +98,7 @@ export function EquipmentCodeScanner({ disabled, onScan }: {
     startCamera();
     return () => {
       cancelled = true;
-      if (timer) clearInterval(timer);
-      stream?.getTracks().forEach(track => track.stop());
+      controls?.stop();
       if (videoElement) videoElement.srcObject = null;
       lastCameraValueRef.current = '';
       pendingFloaterRef.current = null;
@@ -143,8 +136,8 @@ export function EquipmentCodeScanner({ disabled, onScan }: {
           <video ref={videoRef} playsInline muted className="absolute inset-0 h-full w-full object-cover" />
           {cameraState === 'starting' && <div className="relative text-white text-sm flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Starting camera…</div>}
           {cameraState === 'active' && <div className="relative w-3/4 h-1/2 border-2 border-emerald-400 rounded-xl pointer-events-none"><div className="absolute top-1/2 left-2 right-2 h-0.5 bg-emerald-400 shadow-[0_0_8px_#34d399]" /></div>}
-          {cameraState === 'unsupported' && <div className="relative px-6 text-center text-white text-sm"><Camera className="w-7 h-7 mx-auto mb-2" />Camera scanning is unavailable in this browser. Use the scanner input below.</div>}
-          {cameraState === 'denied' && <div className="relative px-6 text-center text-white text-sm">Camera access was denied or unavailable. Allow camera permission, use HTTPS, or use the input below.</div>}
+          {cameraState === 'unsupported' && <div className="relative px-6 text-center text-white text-sm"><Camera className="w-7 h-7 mx-auto mb-2" />Camera access requires localhost or HTTPS. Use the scanner input below if camera access is unavailable.</div>}
+          {cameraState === 'denied' && <div className="relative px-6 text-center text-white text-sm">Camera access was denied or the camera is in use. Allow permission, close other camera apps, or use the input below.</div>}
         </div>
 
         {pendingFloater && <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 space-y-3">
