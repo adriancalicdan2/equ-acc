@@ -1,12 +1,32 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { type ChangeEvent, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Camera, CheckCircle2, Loader2, ScanLine, X } from 'lucide-react';
+import { Camera, CheckCircle2, ImagePlus, Loader2, ScanLine, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { classifyEquipmentSerial, FloaterType } from '@/lib/equipmentScanner';
+
+async function createEquipmentCodeReader(tryHarder = false) {
+  const [{ BrowserMultiFormatReader }, { BarcodeFormat, DecodeHintType }] = await Promise.all([
+    import('@zxing/browser'),
+    import('@zxing/library'),
+  ]);
+  const hints = new Map<import('@zxing/library').DecodeHintType, unknown>();
+  hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+    BarcodeFormat.QR_CODE,
+    BarcodeFormat.CODE_128,
+    BarcodeFormat.CODE_39,
+    BarcodeFormat.CODE_93,
+    BarcodeFormat.DATA_MATRIX,
+  ]);
+  if (tryHarder) hints.set(DecodeHintType.TRY_HARDER, true);
+  return new BrowserMultiFormatReader(hints, {
+    delayBetweenScanAttempts: 120,
+    delayBetweenScanSuccess: 800,
+  });
+}
 
 export function EquipmentCodeScanner({ disabled, onScan }: {
   disabled?: boolean;
@@ -17,9 +37,12 @@ export function EquipmentCodeScanner({ disabled, onScan }: {
   const [pendingFloater, setPendingFloater] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [cameraState, setCameraState] = useState<'idle' | 'starting' | 'active' | 'unsupported' | 'denied'>('idle');
+  const [imageState, setImageState] = useState<'idle' | 'decoding'>('idle');
   const videoRef = useRef<HTMLVideoElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const lastCameraValueRef = useRef('');
   const pendingFloaterRef = useRef<string | null>(null);
+  const processingImageRef = useRef(false);
   const onScanRef = useRef(onScan);
 
   useEffect(() => { onScanRef.current = onScan; }, [onScan]);
@@ -70,13 +93,20 @@ export function EquipmentCodeScanner({ disabled, onScan }: {
       if (!videoElement) return;
       setCameraState('starting');
       try {
-        const { BrowserMultiFormatReader } = await import('@zxing/browser');
-        const reader = new BrowserMultiFormatReader();
+        const reader = await createEquipmentCodeReader();
         const scannerControls = await reader.decodeFromConstraints(
-          { video: { facingMode: { ideal: 'environment' } }, audio: false },
+          {
+            video: {
+              facingMode: { ideal: 'environment' },
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+              advanced: [{ focusMode: 'continuous' }],
+            } as unknown as MediaTrackConstraints,
+            audio: false,
+          },
           videoElement,
           result => {
-            if (!result || pendingFloaterRef.current) return;
+            if (!result || pendingFloaterRef.current || processingImageRef.current) return;
             const value = result.getText().trim();
             if (!value || value === lastCameraValueRef.current) return;
             lastCameraValueRef.current = value;
@@ -117,6 +147,42 @@ export function EquipmentCodeScanner({ disabled, onScan }: {
     if (manualValue.trim() && !pendingFloater) acceptValue(manualValue);
   };
 
+  const uploadCodePhoto = async (event: ChangeEvent<HTMLInputElement>) => {
+    const input = event.currentTarget;
+    const file = input.files?.[0];
+    if (!file || pendingFloater) return;
+    if (!file.type.startsWith('image/')) {
+      setFeedback({ type: 'error', message: 'Please choose an image containing a QR code or barcode.' });
+      input.value = '';
+      return;
+    }
+    if (file.size > 15 * 1024 * 1024) {
+      setFeedback({ type: 'error', message: 'The photo is larger than 15 MB. Please choose a smaller image.' });
+      input.value = '';
+      return;
+    }
+
+    processingImageRef.current = true;
+    setImageState('decoding');
+    setFeedback(null);
+    const imageUrl = URL.createObjectURL(file);
+    try {
+      const reader = await createEquipmentCodeReader(true);
+      const result = await reader.decodeFromImageUrl(imageUrl);
+      acceptValue(result.getText());
+    } catch {
+      setFeedback({
+        type: 'error',
+        message: 'No readable equipment code was found. Try a sharper, well-lit photo with the entire code visible.',
+      });
+    } finally {
+      URL.revokeObjectURL(imageUrl);
+      processingImageRef.current = false;
+      setImageState('idle');
+      input.value = '';
+    }
+  };
+
   return <>
     <Button type="button" disabled={disabled} onClick={() => setOpen(true)} className="h-10 bg-emerald-600 hover:bg-emerald-500 text-white">
       <ScanLine className="w-4 h-4 mr-2" /> Scan equipment QR / barcode
@@ -152,6 +218,18 @@ export function EquipmentCodeScanner({ disabled, onScan }: {
         {feedback && <div aria-live="polite" className={`rounded-lg border px-3 py-2 text-sm flex items-start gap-2 ${feedback.type === 'success' ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600' : 'border-destructive/30 bg-destructive/10 text-destructive'}`}>
           {feedback.type === 'success' && <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0" />}{feedback.message}
         </div>}
+
+        <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-2">
+          <div>
+            <p className="text-sm font-semibold">Scan from a photo</p>
+            <p className="text-xs text-muted-foreground">Choose a clear image from this device. The photo is processed only in your browser.</p>
+          </div>
+          <input ref={imageInputRef} type="file" accept="image/*" onChange={uploadCodePhoto} disabled={imageState === 'decoding' || !!pendingFloater} className="sr-only" aria-label="Upload QR code or barcode photo" />
+          <Button type="button" variant="outline" disabled={imageState === 'decoding' || !!pendingFloater} onClick={() => imageInputRef.current?.click()} className="w-full">
+            {imageState === 'decoding' ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <ImagePlus className="w-4 h-4 mr-2" />}
+            {imageState === 'decoding' ? 'Reading photo...' : 'Upload QR / barcode photo'}
+          </Button>
+        </div>
 
         <div className="space-y-1.5">
           <Label htmlFor="scanner-input">USB/Bluetooth scanner or manual serial</Label>
