@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/firebase/AuthContext';
+import { authenticatedFetch } from '@/lib/firebase/authenticatedFetch';
 import { firestore } from '@/lib/firebase/client';
 import {
   collection, doc, getDoc, setDoc, onSnapshot, query, orderBy
@@ -481,7 +482,7 @@ export default function TimeCardPage() {
     if (!targetUid) return;
     setDownloading(true);
     try {
-      const res = await fetch('/api/generate-timecard', {
+      const res = await authenticatedFetch('/api/generate-timecard', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

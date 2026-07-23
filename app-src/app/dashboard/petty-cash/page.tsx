@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { firestore, auth } from '@/lib/firebase/client';
 import { useAuth } from '@/lib/firebase/AuthContext';
+import { authenticatedFetch } from '@/lib/firebase/authenticatedFetch';
 import { collection, onSnapshot, query, orderBy, doc, setDoc, deleteDoc, where } from 'firebase/firestore';
 
 // Categories matching the xlsx template
@@ -172,8 +173,6 @@ function PettyCashContent() {
   const beginningDate = watch('beginningDate');
   const cashOnHand = watch('cashOnHand');
   const cashOnHandDate = watch('cashOnHandDate');
-  const amountReplenished = watch('amountReplenished');
-  const replenishmentDate = watch('replenishmentDate');
   const balanceEndingDate = watch('balanceEndingDate');
   const preparedBy = watch('preparedBy');
   const preparedDate = watch('preparedDate');
@@ -369,7 +368,7 @@ function PettyCashContent() {
   const onSubmit = async (data: PettyCashForm) => {
     setGenerating(true);
     try {
-      const res = await fetch('/api/generate-petty-cash', {
+      const res = await authenticatedFetch('/api/generate-petty-cash', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
@@ -692,9 +691,9 @@ function PettyCashContent() {
                 <span className="font-bold text-emerald-600">₱{availableBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
               </div>
               <div className="bg-neutral-50 p-3 rounded-lg border border-neutral-100">
-                <span className="text-[9px] uppercase font-bold text-neutral-400 block">Replenished Amount</span>
-                <span className="font-bold text-neutral-800">₱{(parseFloat(amountReplenished) || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
-                <span className="text-[9px] text-neutral-400 block mt-1">{replenishmentDate || '—'}</span>
+                <span className="text-[9px] uppercase font-bold text-neutral-400 block">Bal. Petty Cash Onhand</span>
+                <span className="font-bold text-neutral-800">₱{(parseFloat(cashOnHand) || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                <span className="text-[9px] text-neutral-400 block mt-1">{cashOnHandDate || '—'}</span>
               </div>
             </div>
 

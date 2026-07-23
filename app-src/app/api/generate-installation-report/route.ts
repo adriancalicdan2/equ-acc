@@ -1,79 +1,68 @@
 import { NextRequest, NextResponse } from 'next/server';
 import ExcelJS from 'exceljs';
 import path from 'path';
+import { authorizeRequest } from '@/lib/server/auth';
+import { enforceRateLimit } from '@/lib/server/rateLimit';
+import { parseJsonRequest } from '@/lib/server/request';
+import { installationReportSchema } from '@/lib/validations/apiSchemas';
 
-// Fixed installation items that match the xlsx template rows 13–21
-const INSTALL_ITEMS = [
-  'Work our monitoring points',
-  'Oil Level Monitoring',
-  'Whole-Ship Intelligent Networking',
-  'Data Storage & Transmission',
-  'Data Storage & Transmission (Oil Level)',
-  'Intelligent Analysis Subs (Working Hour)',
-  'Intelligent Analysis Subs (Fuel)',
-  'System Delivery Service Fee',
-  'System Operation Service Fee',
-];
+export async function POST(request: NextRequest) {
+  const authorization = await authorizeRequest(request, { view: 'installation-report' });
+  if (!authorization.authorized) return authorization.response;
+  const rateLimited = enforceRateLimit(`generate-installation:${authorization.token.uid}`, 30, 60_000);
+  if (rateLimited) return rateLimited;
 
-export async function POST(req: NextRequest) {
+  const parsed = await parseJsonRequest(request, installationReportSchema);
+  if (!parsed.success) return parsed.response;
+
   try {
-    const data = await req.json();
     const {
       vessel,
       representative,
       date,
       refCO,
-      items = [], // Array of { qty: string, remarks: string } — 9 items matching INSTALL_ITEMS
+      items,
       reportSummary,
-      aimfRep,      // AIMF Tech Corp signatory
-      zeahoRep,     // ZEAHO (NANJING) signatory
-      technicalSup, // Technical Superintendent signatory
-    } = data;
+      aimfRep,
+      zeahoRep,
+      technicalSup,
+    } = parsed.data;
 
-    // Read the template
     const templatePath = path.join(process.cwd(), 'public', 'templates', 'AIMF_ Installation Report.xlsx');
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.readFile(templatePath);
-    // Fill all sheets in the workbook (Report, NARRA)
-    workbook.eachSheet((ws) => {
-      // Header fields — write label+value into the same merged cell
-      if (vessel)         ws.getCell('A6').value = 'Vessel: ' + vessel;
-      if (representative) ws.getCell('A7').value = 'AIMF I.T Representative: ' + representative;
-      if (date)           ws.getCell('K9').value = 'Date: ' + date;
-      if (refCO)          ws.getCell('L10').value = refCO;
 
-      // Install items — rows 13 to 21 (9 items)
-      // Note: row 13 has a different merge layout — qty master is I13, rows 14-21 use H{row}
-      items.forEach((item: { qty: string; remarks: string }, idx: number) => {
-        const row = 13 + idx;
+    workbook.eachSheet((worksheet) => {
+      if (vessel) worksheet.getCell('A6').value = `Vessel: ${vessel}`;
+      if (representative) worksheet.getCell('A7').value = `AIMF I.T Representative: ${representative}`;
+      if (date) worksheet.getCell('K9').value = `Date: ${date}`;
+      if (refCO) worksheet.getCell('L10').value = refCO;
+
+      items.forEach((item, index) => {
+        const row = 13 + index;
         if (row > 21) return;
-        const qtyCell = row === 13 ? 'I13' : `H${row}`;
-        if (item.qty)     ws.getCell(qtyCell).value = item.qty;
-        if (item.remarks) ws.getCell(`K${row}`).value = item.remarks;
+        const quantityCell = row === 13 ? 'I13' : `H${row}`;
+        if (item.qty) worksheet.getCell(quantityCell).value = item.qty;
+        if (item.remarks) worksheet.getCell(`K${row}`).value = item.remarks;
       });
 
-      // Report summary — write to the merged summary area (rows 24–28, col A)
-      if (reportSummary) {
-        ws.getCell('A25').value = reportSummary;
-      }
-
-      // Signatories — each goes into the signature line (row 32) above their company label (row 33)
-      if (aimfRep)      ws.getCell('A32').value = aimfRep;
-      if (zeahoRep)     ws.getCell('E32').value = zeahoRep;
-      if (technicalSup) ws.getCell('K32').value = technicalSup;
+      if (reportSummary) worksheet.getCell('A25').value = reportSummary;
+      if (aimfRep) worksheet.getCell('A32').value = aimfRep;
+      if (zeahoRep) worksheet.getCell('E32').value = zeahoRep;
+      if (technicalSup) worksheet.getCell('K32').value = technicalSup;
     });
 
-    // Write to buffer
     const buffer = await workbook.xlsx.writeBuffer();
     return new NextResponse(buffer, {
       status: 200,
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'Content-Disposition': `attachment; filename="Installation-Report.xlsx"`,
+        'Content-Disposition': 'attachment; filename="Installation-Report.xlsx"',
       },
     });
-  } catch (err: any) {
-    console.error('Installation report generation error:', err);
-    return NextResponse.json({ error: err.message || 'Internal server error' }, { status: 500 });
+  } catch (error) {
+    console.error('[generate-installation-report] Error:', error);
+    const message = error instanceof Error ? error.message : 'Internal server error';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

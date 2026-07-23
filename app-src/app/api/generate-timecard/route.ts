@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import ExcelJS from 'exceljs';
 import path from 'path';
+import { authorizeRequest } from '@/lib/server/auth';
+import { enforceRateLimit } from '@/lib/server/rateLimit';
+import { parseJsonRequest } from '@/lib/server/request';
+import { timecardSchema } from '@/lib/validations/apiSchemas';
 
-type DayStatus = 'Present' | 'Absent' | 'Rest Day' | 'Half-day';
+type DayStatus = 'Present' | 'Absent' | 'Rest Day' | 'Half-day' | 'Regular Holiday' | 'Special Holiday' | 'Holiday No Work' | 'Special Holiday on Rest Day' | 'Regular Holiday on Rest Day' | 'Holiday';
 
 interface DayEntry {
   date: string;       // YYYY-MM-DD
@@ -28,8 +32,15 @@ function calcOT(entry: DayEntry, shiftHours: number): number {
 }
 
 export async function POST(req: NextRequest) {
+  const authorization = await authorizeRequest(req, { view: 'time-card' });
+  if (!authorization.authorized) return authorization.response;
+  const rateLimited = enforceRateLimit(`generate-timecard:${authorization.token.uid}`, 30, 60_000);
+  if (rateLimited) return rateLimited;
+
+  const parsed = await parseJsonRequest(req, timecardSchema);
+  if (!parsed.success) return parsed.response;
+
   try {
-    const data = await req.json();
     const {
       employeeName,
       monthName,
@@ -38,7 +49,7 @@ export async function POST(req: NextRequest) {
       shiftHours = 10,
       year,
       month
-    } = data;
+    } = parsed.data;
 
     // Load the template
     const templatePath = path.join(process.cwd(), 'public', 'templates', 'Time Card.xlsx');
@@ -170,8 +181,9 @@ export async function POST(req: NextRequest) {
         'Content-Disposition': `attachment; filename="Timecard-${employeeName.replace(/\s+/g, '-')}-${monthName.replace(/\s+/g, '-')}.xlsx"`,
       },
     });
-  } catch (err: any) {
-    console.error('Timecard excel generation error:', err);
-    return NextResponse.json({ error: err.message || 'Internal server error' }, { status: 500 });
+  } catch (error) {
+    console.error('[generate-timecard] Error:', error);
+    const message = error instanceof Error ? error.message : 'Internal server error';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

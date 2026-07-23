@@ -13,76 +13,21 @@ const COPY_LABEL: Record<CopyType, string> = {
   likas: 'Likas Copy',
 };
 
-// Maps copy type to source docx filename (in the root workspace)
-const SOURCE_DOCX: Record<CopyType, string> = {
-  aimf: 'EQUIPMENT ACCOUNTABILITY - AIMF.docx',
-  vessel: 'EQUIPMENT ACCOUNTABILITY - Vessel.docx',
-  vessel_owner: 'EQUIPMENT ACCOUNTABILITY - Vessel Owner.docx',
-  likas: 'EQUIPMENT ACCOUNTABILITY - Likas.docx',
-};
-
-// Maps copy type to the exact case-sensitive compiled template file name
-const TEMPLATE_FILENAMES: Record<CopyType, string> = {
-  aimf: 'EQUIPMENT ACCOUNTABILITY - AIMF.docx',
-  vessel: 'EQUIPMENT ACCOUNTABILITY - Vessel.docx',
-  vessel_owner: 'EQUIPMENT ACCOUNTABILITY - Vessel Owner.docx',
-  likas: 'EQUIPMENT ACCOUNTABILITY - Likas.docx',
-};
-
-function getTemplatePath(copyType: CopyType): string {
-  const fileName = TEMPLATE_FILENAMES[copyType];
-  const attemptedPaths: string[] = [];
-
-  const checkPath = (p: string) => {
-    attemptedPaths.push(p);
-    return fs.existsSync(p);
-  };
-
-  // 1. process.cwd() / public / templates
-  let p = path.join(process.cwd(), 'public', 'templates', fileName);
-  if (checkPath(p)) return p;
-
-  // 2. process.cwd() / app-src / public / templates (Netlify sub-dir packaging)
-  p = path.join(process.cwd(), 'app-src', 'public', 'templates', fileName);
-  if (checkPath(p)) return p;
-
-  // 3. process.cwd() / app-src / templates
-  p = path.join(process.cwd(), 'app-src', 'templates', fileName);
-  if (checkPath(p)) return p;
-
-  // 4. Relative to __dirname (webpack standalone bundle paths)
-  p = path.join(__dirname, 'public', 'templates', fileName);
-  if (checkPath(p)) return p;
-
-  p = path.join(__dirname, '..', 'public', 'templates', fileName);
-  if (checkPath(p)) return p;
-
-  p = path.join(__dirname, '..', '..', 'public', 'templates', fileName);
-  if (checkPath(p)) return p;
-
-  p = path.join(__dirname, '..', '..', '..', 'public', 'templates', fileName);
-  if (checkPath(p)) return p;
-
-  p = path.join(__dirname, '..', '..', '..', '..', 'public', 'templates', fileName);
-  if (checkPath(p)) return p;
-
-  p = path.join(__dirname, '..', '..', '..', '..', '..', 'public', 'templates', fileName);
-  if (checkPath(p)) return p;
-
-  // 5. fallback process.cwd() / templates
-  p = path.join(process.cwd(), 'templates', fileName);
-  if (checkPath(p)) return p;
-
-  // 6. Parent directories (local fallback)
-  const parentDir = path.join(process.cwd(), '..');
-  p = path.join(parentDir, SOURCE_DOCX[copyType]);
-  if (checkPath(p)) return p;
-
-  const grandparentDir = path.join(process.cwd(), '..', '..');
-  p = path.join(grandparentDir, SOURCE_DOCX[copyType]);
-  if (checkPath(p)) return p;
-
-  throw new Error(`Template not found for copy type: ${copyType}. Checked paths:\n- ${attemptedPaths.join('\n- ')}`);
+function readTemplate(copyType: CopyType): Buffer {
+  switch (copyType) {
+    case 'aimf':
+      return fs.readFileSync(path.join(process.cwd(), 'public/templates/EQUIPMENT ACCOUNTABILITY - AIMF.docx'));
+    case 'vessel':
+      return fs.readFileSync(path.join(process.cwd(), 'public/templates/EQUIPMENT ACCOUNTABILITY - Vessel.docx'));
+    case 'vessel_owner':
+      return fs.readFileSync(path.join(process.cwd(), 'public/templates/EQUIPMENT ACCOUNTABILITY - Vessel Owner.docx'));
+    case 'likas':
+      return fs.readFileSync(path.join(process.cwd(), 'public/templates/EQUIPMENT ACCOUNTABILITY - Likas.docx'));
+    default: {
+      const exhaustiveCheck: never = copyType;
+      throw new Error(`Unsupported copy type: ${exhaustiveCheck}`);
+    }
+  }
 }
 
 function injectPlaceholdersIntoXml(xml: string, copyType: CopyType): string {
@@ -238,8 +183,7 @@ export async function generateDocx(
   photos: PhotoSet,
   copyType: CopyType
 ): Promise<Buffer> {
-  const templatePath = getTemplatePath(copyType);
-  const templateContent = fs.readFileSync(templatePath);
+  const templateContent = readTemplate(copyType);
   const zip = new PizZip(templateContent);
 
   // Process & resize photos

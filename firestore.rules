@@ -1,0 +1,84 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function profile() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isAdmin() {
+      return signedIn() && profile().role == 'admin';
+    }
+
+    function canView(viewId) {
+      return signedIn()
+        && profile().allowedViews is list
+        && viewId in profile().allowedViews;
+    }
+
+    function isOwner(data) {
+      return signedIn() && data.uid == request.auth.uid;
+    }
+
+    match /users/{userId} {
+      allow get: if signedIn() && (
+        request.auth.uid == userId
+        || isAdmin()
+        || canView('payslip')
+      );
+      allow list: if isAdmin() || canView('payslip');
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /reports/{reportId} {
+      allow read: if isAdmin() || canView('equipment-accountability') || canView('inventory');
+      allow create: if canView('equipment-accountability') && isOwner(request.resource.data);
+      allow update: if isAdmin() || (
+        canView('equipment-accountability')
+        && isOwner(resource.data)
+        && isOwner(request.resource.data)
+      );
+      allow delete: if isAdmin() || (canView('equipment-accountability') && isOwner(resource.data));
+    }
+
+    match /petty-cash-reports/{reportId} {
+      allow read: if isAdmin() || (canView('petty-cash') && isOwner(resource.data));
+      allow create: if canView('petty-cash') && isOwner(request.resource.data);
+      allow update: if isAdmin() || (
+        canView('petty-cash')
+        && isOwner(resource.data)
+        && isOwner(request.resource.data)
+      );
+      allow delete: if isAdmin() || (canView('petty-cash') && isOwner(resource.data));
+    }
+
+    match /installation-reports/{reportId} {
+      allow read: if isAdmin() || (canView('installation-report') && isOwner(resource.data));
+      allow create: if canView('installation-report') && isOwner(request.resource.data);
+      allow update: if isAdmin() || (
+        canView('installation-report')
+        && isOwner(resource.data)
+        && isOwner(request.resource.data)
+      );
+      allow delete: if isAdmin() || (canView('installation-report') && isOwner(resource.data));
+    }
+
+    match /inventory/{itemId} {
+      allow read, write: if isAdmin() || canView('inventory');
+    }
+
+    match /timecards/{userId}/{month}/{period} {
+      allow read, write: if isAdmin() || (
+        canView('time-card') && request.auth.uid == userId
+      );
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

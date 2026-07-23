@@ -14,6 +14,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { firestore, auth } from '@/lib/firebase/client';
 import { useAuth } from '@/lib/firebase/AuthContext';
+import { authenticatedFetch } from '@/lib/firebase/authenticatedFetch';
 import {
   collection, onSnapshot, query, orderBy, doc,
   setDoc, deleteDoc, where,
@@ -316,7 +317,7 @@ function InstallationReportContent() {
   const handleDownload = async () => {
     setGenerating(true);
     try {
-      const res = await fetch('/api/generate-installation-report', {
+      const res = await authenticatedFetch('/api/generate-installation-report', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form),
