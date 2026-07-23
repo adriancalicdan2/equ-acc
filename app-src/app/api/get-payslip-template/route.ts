@@ -1,8 +1,15 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import ExcelJS from 'exceljs';
 import path from 'path';
+import { authorizeRequest } from '@/lib/server/auth';
+import { enforceRateLimit } from '@/lib/server/rateLimit';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const authorization = await authorizeRequest(request, { view: 'payslip' });
+  if (!authorization.authorized) return authorization.response;
+  const rateLimited = enforceRateLimit(`get-payslip-template:${authorization.token.uid}`, 60, 60_000);
+  if (rateLimited) return rateLimited;
+
   try {
     const templatePath = path.join(process.cwd(), 'public', 'templates', 'paysliper-template-list1.xlsx');
     const workbook = new ExcelJS.Workbook();
@@ -54,8 +61,9 @@ export async function GET() {
       absences,
       otherDeductions
     });
-  } catch (err: any) {
-    console.error('Error reading payslip template:', err);
-    return NextResponse.json({ error: err.message || 'Internal server error' }, { status: 500 });
+  } catch (error) {
+    console.error('[get-payslip-template] Error:', error);
+    const message = error instanceof Error ? error.message : 'Internal server error';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

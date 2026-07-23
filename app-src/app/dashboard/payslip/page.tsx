@@ -7,6 +7,7 @@ import { Loader2, Download, Printer, RefreshCw, FileText, User, Calendar, Clock 
 import { toast } from 'sonner';
 import { useAuth } from '@/lib/firebase/AuthContext';
 import { firestore } from '@/lib/firebase/client';
+import { authenticatedFetch } from '@/lib/firebase/authenticatedFetch';
 import { collection, onSnapshot, query, orderBy, doc, getDoc } from 'firebase/firestore';
 
 interface PayslipFormState {
@@ -441,7 +442,7 @@ export default function PayslipPage() {
     }
     setDownloading(true);
     try {
-      const res = await fetch('/api/generate-payslip', {
+      const res = await authenticatedFetch('/api/generate-payslip', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form),

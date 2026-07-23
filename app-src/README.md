@@ -1,36 +1,57 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# AIMF Equipment Accountability
 
-## Getting Started
+Internal AIMF Tech. Corp. operations portal for vessel equipment accountability, inventory, petty cash, time cards, installation reports, payslips, and employee administration.
 
-First, run the development server:
+## Stack
+
+- Next.js 16 App Router and React 19
+- Firebase Authentication and Cloud Firestore
+- Zod request and form validation
+- ExcelJS for spreadsheet reports
+- Docxtemplater, PizZip, Sharp, and JSZip for equipment-accountability packages
+
+## Local development
+
+Requirements: Node.js 20 or newer, npm, and a Firebase project with Authentication and Firestore enabled.
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The app runs at `http://localhost:3000`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Server credentials
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Authenticated API routes use the Firebase Admin SDK. Configure one of the following:
 
-## Learn More
+- `FIREBASE_SERVICE_ACCOUNT`: the complete service-account JSON encoded as one environment-variable value; recommended for deployment.
+- `app-src/service-account.json`: a local-only development fallback. This path is ignored by Git.
 
-To learn more about Next.js, take a look at the following resources:
+Never expose a service-account private key through a `NEXT_PUBLIC_` variable.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Quality checks
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+npm run lint
+npm run test
+npm run build
+```
 
-## Deploy on Vercel
+`npm run test` currently covers the statutory contribution, withholding-tax, net-pay, and number-to-words calculations.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Authorization
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Every report-generation endpoint requires a Firebase ID token. The server re-reads the caller's Firestore profile and checks the relevant `allowedViews` permission; administrative account operations additionally require `role: "admin"`.
+
+The repository's Firestore rules are located at `../firestore.rules`. Deploy them from the repository root with the Firebase CLI after selecting the correct Firebase project:
+
+```bash
+firebase deploy --only firestore:rules
+```
+
+Client-side page guards improve navigation but are not a substitute for deploying the Firestore rules.
+
+## Deployment
+
+Netlify configuration lives at `../netlify.toml`. The build base is `app-src`, and report templates are packaged under `public/templates` for server-side generation.

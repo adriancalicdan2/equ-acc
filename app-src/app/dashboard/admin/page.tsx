@@ -2,11 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { initializeApp, deleteApp } from 'firebase/app';
-import { getAuth, createUserWithEmailAndPassword, signOut as secondarySignOut } from 'firebase/auth';
-import { firestore, firebaseConfig } from '@/lib/firebase/client';
+import { firestore } from '@/lib/firebase/client';
 import { useAuth } from '@/lib/firebase/AuthContext';
-import { collection, onSnapshot, query, orderBy, doc, deleteDoc, setDoc } from 'firebase/firestore';
+import { authenticatedFetch } from '@/lib/firebase/authenticatedFetch';
+import { collection, onSnapshot, query, orderBy, doc, deleteDoc } from 'firebase/firestore';
 import { 
   ShieldCheck, FileText, Wallet, Search, Trash2, ExternalLink, Download, 
   Loader2, BadgeAlert, Database, Calendar, User, Plus, Users, X
@@ -83,18 +82,6 @@ export default function AdminPage() {
     }
   }, [user, isAdmin, loading, router]);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="w-8 h-8 text-primary animate-spin" />
-      </div>
-    );
-  }
-
-  if (!user || !isAdmin) {
-    return null;
-  }
-
 
   // Subscribe to Equipment Accountability reports
   useEffect(() => {
@@ -132,7 +119,20 @@ export default function AdminPage() {
     return () => unsubscribe();
   }, []);
 
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="w-8 h-8 text-primary animate-spin" />
+      </div>
+    );
+  }
+
+  if (!user || !isAdmin) {
+    return null;
+  }
+
   // Filter vessel reports
+
 
   const filteredVesselReports = vesselReports.filter(r => 
     (r.vesselInfo?.vesselName || '').toLowerCase().includes(vesselSearch.toLowerCase()) ||
@@ -227,7 +227,7 @@ export default function AdminPage() {
   const handleDownloadPettyCash = async (report: any) => {
     setLoadingPC(report.id);
     try {
-      const res = await fetch('/api/generate-petty-cash', {
+      const res = await authenticatedFetch('/api/generate-petty-cash', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(report),
@@ -254,38 +254,31 @@ export default function AdminPage() {
   const handleAddEmployee = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newEmpEmail) { toast.error('Email is required'); return; }
-    if (!newEmpPassword || newEmpPassword.length < 6) {
-      toast.error('Password is required and must be at least 6 characters long');
+    if (!newEmpPassword || newEmpPassword.length < 8) {
+      toast.error('Password is required and must be at least 8 characters long');
       return;
     }
+
     setIsSubmittingEmp(true);
-    let secondaryApp;
     try {
       const cleanEmail = newEmpEmail.trim().toLowerCase();
-      const appName = `SecondaryApp-${Date.now()}`;
-      
-      // Initialize secondary app instance to register the user without signing out the admin
-      secondaryApp = initializeApp(firebaseConfig, appName);
-      const secondaryAuth = getAuth(secondaryApp);
-      
-      // Create user credential in Firebase Auth
-      const userCredential = await createUserWithEmailAndPassword(secondaryAuth, cleanEmail, newEmpPassword);
-      const uid = userCredential.user.uid;
-      
-      // Create the user profile document in Firestore keyed by UID
-      await setDoc(doc(firestore, 'users', uid), {
-        email: cleanEmail,
-        displayName: newEmpName.trim(),
-        role: newEmpRole,
-        shiftHours: newEmpShiftHours,
-        restDays: newEmpRestDays,
-        allowedViews: newEmpRole === 'admin' ? ['equipment-accountability', 'petty-cash', 'time-card'] : newEmpAllowedViews,
-        createdAt: new Date(),
-      }, { merge: true });
-      
-      // Sign out from the secondary session
-      await secondarySignOut(secondaryAuth);
-      
+      const response = await authenticatedFetch('/api/admin-update-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'create',
+          email: cleanEmail,
+          displayName: newEmpName.trim(),
+          password: newEmpPassword,
+          role: newEmpRole,
+          allowedViews: newEmpAllowedViews,
+          shiftHours: newEmpShiftHours,
+          restDays: newEmpRestDays,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Failed to create employee');
+
       toast.success(`Account for ${cleanEmail} created successfully!`);
       setNewEmpEmail('');
       setNewEmpName('');
@@ -298,61 +291,69 @@ export default function AdminPage() {
     } catch (err: any) {
       toast.error('Failed to create employee account: ' + err.message);
     } finally {
-      if (secondaryApp) {
-        try {
-          await deleteApp(secondaryApp);
-        } catch (e) {
-          console.error('Error cleaning up secondary Firebase app:', e);
-        }
-      }
       setIsSubmittingEmp(false);
     }
   };
-
   const handleUpdateRole = async (id: string, newRole: string) => {
     try {
-      await setDoc(doc(firestore, 'users', id), { role: newRole }, { merge: true });
+      const response = await authenticatedFetch('/api/admin-update-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'update', uid: id, role: newRole }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Failed to update role');
       toast.success('Employee role updated successfully');
     } catch (err: any) {
       toast.error('Failed to update employee role: ' + err.message);
     }
   };
-
   const handleToggleViewPermission = async (id: string, viewId: string, currentViews: string[]) => {
     try {
       const nextViews = currentViews.includes(viewId)
-        ? currentViews.filter(v => v !== viewId)
+        ? currentViews.filter(view => view !== viewId)
         : [...currentViews, viewId];
-      await setDoc(doc(firestore, 'users', id), { allowedViews: nextViews }, { merge: true });
+      const response = await authenticatedFetch('/api/admin-update-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'update', uid: id, allowedViews: nextViews }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Failed to update permissions');
       toast.success('View permissions updated successfully');
     } catch (err: any) {
       toast.error('Failed to update view permissions: ' + err.message);
     }
   };
-
   const handleDeleteEmployee = async (id: string, email: string) => {
     if (!window.confirm(`Are you sure you want to remove ${email || id} from the system?`)) return;
     try {
-      await deleteDoc(doc(firestore, 'users', id));
+      const response = await authenticatedFetch('/api/admin-update-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete', uid: id }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Failed to delete employee');
       toast.success('Employee deleted successfully');
     } catch (err: any) {
       toast.error('Failed to delete employee: ' + err.message);
     }
   };
-
   const handleSaveEmpSettings = async () => {
     if (!editEmp) return;
     if (!editEmpEmail) { toast.error('Email is required'); return; }
-    if (editEmpPassword && editEmpPassword.length < 6) {
-      toast.error('Password must be at least 6 characters long');
+    if (editEmpPassword && editEmpPassword.length < 8) {
+      toast.error('Password must be at least 8 characters long');
       return;
     }
     setIsSavingSettings(true);
     try {
-      const res = await fetch('/api/admin-update-user', {
+      const res = await authenticatedFetch('/api/admin-update-user', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          action: 'update',
           uid: editEmp.id,
           email: editEmpEmail,
           displayName: editEmpName,
@@ -987,6 +988,21 @@ export default function AdminPage() {
                           />
                           Payslip Center
                         </label>
+                        <label className="flex items-center gap-2.5 text-xs text-foreground cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={newEmpAllowedViews.includes('daily-logs-voyages')}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setNewEmpAllowedViews([...newEmpAllowedViews, 'daily-logs-voyages']);
+                              } else {
+                                setNewEmpAllowedViews(newEmpAllowedViews.filter(v => v !== 'daily-logs-voyages'));
+                              }
+                            }}
+                            className="w-4 h-4 rounded border-border bg-muted/50 text-primary accent-primary"
+                          />
+                          Daily Logs & Voyages
+                        </label>
                       </div>
                     </div>
 
@@ -1073,7 +1089,7 @@ export default function AdminPage() {
                           {emp.role === 'admin' ? (
                             <span className="text-muted-foreground italic text-[11px]">All views allowed (Admin)</span>
                           ) : (
-                            <div className="flex gap-4">
+                            <div className="flex flex-wrap gap-4">
                               <label className="flex items-center gap-1.5 cursor-pointer text-[11px]">
                                 <input 
                                   type="checkbox"
@@ -1127,6 +1143,15 @@ export default function AdminPage() {
                                   className="w-3.5 h-3.5 rounded border-neutral-700 accent-primary"
                                 />
                                 Payslip
+                              </label>
+                              <label className="flex items-center gap-1.5 cursor-pointer text-[11px]">
+                                <input
+                                  type="checkbox"
+                                  checked={(emp.allowedViews || []).includes('daily-logs-voyages')}
+                                  onChange={() => handleToggleViewPermission(emp.id, 'daily-logs-voyages', emp.allowedViews || [])}
+                                  className="w-3.5 h-3.5 rounded border-neutral-700 accent-primary"
+                                />
+                                Daily Logs & Voyages
                               </label>
                             </div>
                           )}
@@ -1284,6 +1309,7 @@ export default function AdminPage() {
                         { id: 'time-card', label: 'Time Card' },
                         { id: 'installation-report', label: 'Installation Report' },
                         { id: 'payslip', label: 'Payslip Center' },
+                        { id: 'daily-logs-voyages', label: 'Daily Logs & Voyages' },
                       ].map(v => {
                         const checked = editEmpAllowedViews.includes(v.id);
                         return (

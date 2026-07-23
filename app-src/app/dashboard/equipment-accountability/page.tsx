@@ -22,6 +22,7 @@ import { CopyType } from '@/types/form';
 import { cn } from '@/lib/utils';
 import { firestore, auth } from '@/lib/firebase/client';
 import { useAuth } from '@/lib/firebase/AuthContext';
+import { authenticatedFetch } from '@/lib/firebase/authenticatedFetch';
 import { collection, onSnapshot, query, orderBy, doc, setDoc, deleteDoc, where } from 'firebase/firestore';
 import { EquipmentCodeScanner } from '@/components/form/EquipmentCodeScanner';
 import { classifyEquipmentSerial, FloaterType, nextEmptyIndex, nextFloaterIndex } from '@/lib/equipmentScanner';
@@ -222,7 +223,11 @@ function EquipmentAccountabilityContent() {
       }
 
       const isLast = idx === selectedCopies.length - 1;
-      return `<div class="printable-report" style="page-break-after: ${isLast ? 'avoid' : 'always'};">${tempDiv.innerHTML}</div>`;
+      return `
+        <div style="page-break-after: ${isLast ? 'avoid' : 'always'}; box-sizing: border-box; padding: 2cm; width: 100%;">
+          <div class="printable-report">${tempDiv.innerHTML}</div>
+        </div>
+      `;
     }).join('\n');
 
     printWindow.document.write(`
@@ -232,7 +237,7 @@ function EquipmentAccountabilityContent() {
           ${styles}
           <style>
             @page { margin: 0; }
-            body { background: white !important; color: black !important; padding: 2cm !important; margin: 0 !important; }
+            body { background: white !important; color: black !important; padding: 0 !important; margin: 0 !important; }
             .printable-report { width: 100% !important; max-width: 100% !important; border: none !important; box-shadow: none !important; padding: 0 !important; margin: 0 !important; }
           </style>
         </head>
@@ -596,7 +601,7 @@ function EquipmentAccountabilityContent() {
       fd.append('solarPowerStatus', values.solar.powerStatus);
       fd.append('remarks', values.remarks?.trim() || 'Installation done properly');
       fd.append('copyTypes', JSON.stringify(values.copyTypes));
-      const res = await fetch('/api/generate-docx', { method: 'POST', body: fd });
+      const res = await authenticatedFetch('/api/generate-docx', { method: 'POST', body: fd });
       if (!res.ok) { const err = await res.json(); throw new Error(err.error ?? 'Generation failed'); }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);

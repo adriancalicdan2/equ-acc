@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   FileText, Wallet, Shield, LogOut, Menu, X, Clock,
-  Briefcase, ClipboardList, ChevronLeft, ChevronRight,
+  Briefcase, ClipboardList, ChevronLeft, Ship,
 } from 'lucide-react';
 import { useAuth } from '@/lib/firebase/AuthContext';
 import { cn } from '@/lib/utils';
@@ -48,6 +48,12 @@ const VIEWS = [
     href: '/dashboard/payslip',
   },
   {
+    id: 'daily-logs-voyages',
+    label: 'Daily Logs & Voyages',
+    icon: Ship,
+    href: '/dashboard/daily-logs-voyages',
+  },
+  {
     id: 'admin',
     label: 'Admin Console',
     icon: Shield,
@@ -63,7 +69,7 @@ export default function Sidebar() {
 
   const initial = displayName?.[0] || user?.email?.[0] || 'U';
 
-  const NavContent = ({ mini, onToggle }: { mini?: boolean; onToggle?: () => void }) => (
+  const renderNavContent = ({ mini, onToggle }: { mini?: boolean; onToggle?: () => void }) => (
     <>
       {/* Logo + Collapse Toggle */}
       <div className={cn(
@@ -170,7 +176,7 @@ export default function Sidebar() {
         )}
         onClick={collapsed ? () => setCollapsed(false) : undefined}
       >
-        <NavContent mini={collapsed} onToggle={collapsed ? undefined : () => setCollapsed(true)} />
+        {renderNavContent({ mini: collapsed, onToggle: collapsed ? undefined : () => setCollapsed(true) })}
       </aside>
 
       {/* Mobile Top Bar */}
@@ -194,7 +200,7 @@ export default function Sidebar() {
         <div className="md:hidden fixed inset-0 z-40">
           <div className="absolute inset-0 bg-black/50" onClick={() => setMobileOpen(false)} />
           <aside className="absolute left-0 top-0 bottom-0 w-72 flex flex-col border-r border-border/60 bg-background">
-            <NavContent />
+            {renderNavContent({})}
           </aside>
         </div>
       )}
