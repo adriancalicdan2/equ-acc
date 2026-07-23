@@ -2,11 +2,18 @@
 
 import { type ChangeEvent, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import dynamic from 'next/dynamic';
+import type { IDetectedBarcode, IScannerError } from '@yudiel/react-qr-scanner';
 import { Camera, CheckCircle2, ImagePlus, Loader2, ScanLine, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { classifyEquipmentSerial, FloaterType } from '@/lib/equipmentScanner';
+
+const LiveEquipmentScanner = dynamic(
+  () => import('@yudiel/react-qr-scanner').then(module => module.Scanner),
+  { ssr: false },
+);
 
 async function createEquipmentCodeReader(tryHarder = false) {
   const [{ BrowserMultiFormatReader }, { BarcodeFormat, DecodeHintType }] = await Promise.all([
@@ -36,9 +43,8 @@ export function EquipmentCodeScanner({ disabled, onScan }: {
   const [manualValue, setManualValue] = useState('');
   const [pendingFloater, setPendingFloater] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
-  const [cameraState, setCameraState] = useState<'idle' | 'starting' | 'active' | 'unsupported' | 'denied'>('idle');
+  const [cameraError, setCameraError] = useState<string | null>(null);
   const [imageState, setImageState] = useState<'idle' | 'decoding'>('idle');
-  const videoRef = useRef<HTMLVideoElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const lastCameraValueRef = useRef('');
   const pendingFloaterRef = useRef<string | null>(null);
@@ -79,68 +85,35 @@ export function EquipmentCodeScanner({ disabled, onScan }: {
     }
   };
 
-  useEffect(() => {
-    if (!open) return;
-    let controls: { stop: () => void } | null = null;
-    let cancelled = false;
-    const videoElement = videoRef.current;
+  const handleCameraScan = (detectedCodes: IDetectedBarcode[]) => {
+    if (pendingFloaterRef.current || processingImageRef.current) return;
+    const value = detectedCodes[0]?.rawValue.trim();
+    if (!value || value === lastCameraValueRef.current) return;
+    setCameraError(null);
+    lastCameraValueRef.current = value;
+    acceptValue(value);
+  };
 
-    const startCamera = async () => {
-      if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
-        setCameraState('unsupported');
-        return;
-      }
-      if (!videoElement) return;
-      setCameraState('starting');
-      try {
-        const reader = await createEquipmentCodeReader();
-        const scannerControls = await reader.decodeFromConstraints(
-          {
-            video: {
-              facingMode: { ideal: 'environment' },
-              width: { ideal: 1280 },
-              height: { ideal: 720 },
-              advanced: [{ focusMode: 'continuous' }],
-            } as unknown as MediaTrackConstraints,
-            audio: false,
-          },
-          videoElement,
-          result => {
-            if (!result || pendingFloaterRef.current || processingImageRef.current) return;
-            const value = result.getText().trim();
-            if (!value || value === lastCameraValueRef.current) return;
-            lastCameraValueRef.current = value;
-            acceptValue(value);
-          },
-        );
-        controls = scannerControls;
-        if (cancelled) {
-          scannerControls.stop();
-          return;
-        }
-        setCameraState('active');
-      } catch {
-        if (cancelled) return;
-        setCameraState('denied');
-      }
+  const handleCameraError = (error: IScannerError) => {
+    const cameraErrorMessages: Partial<Record<IScannerError['kind'], string>> = {
+      'permission-denied': 'Camera permission was denied. Allow camera access in your browser settings.',
+      'insecure-context': 'Camera access requires localhost or HTTPS.',
+      'no-camera': 'No camera was found on this device.',
+      'in-use': 'The camera is being used by another application.',
+      unsupported: 'Camera scanning is not supported by this browser.',
     };
-
-    startCamera();
-    return () => {
-      cancelled = true;
-      controls?.stop();
-      if (videoElement) videoElement.srcObject = null;
-      lastCameraValueRef.current = '';
-      pendingFloaterRef.current = null;
-    };
-  }, [open]);
+    setCameraError(cameraErrorMessages[error.kind] ?? error.message ?? 'The camera could not be started.');
+  };
 
   const close = () => {
     setOpen(false);
     setManualValue('');
     setPendingFloater(null);
     setFeedback(null);
-    setCameraState('idle');
+    setCameraError(null);
+    lastCameraValueRef.current = '';
+    pendingFloaterRef.current = null;
+    processingImageRef.current = false;
   };
 
   const submitManual = () => {
@@ -199,11 +172,34 @@ export function EquipmentCodeScanner({ disabled, onScan }: {
         </div>
 
         <div className="relative aspect-video overflow-hidden rounded-xl border border-border bg-black flex items-center justify-center">
-          <video ref={videoRef} playsInline muted className="absolute inset-0 h-full w-full object-cover" />
-          {cameraState === 'starting' && <div className="relative text-white text-sm flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Starting camera…</div>}
-          {cameraState === 'active' && <div className="relative w-3/4 h-1/2 border-2 border-emerald-400 rounded-xl pointer-events-none"><div className="absolute top-1/2 left-2 right-2 h-0.5 bg-emerald-400 shadow-[0_0_8px_#34d399]" /></div>}
-          {cameraState === 'unsupported' && <div className="relative px-6 text-center text-white text-sm"><Camera className="w-7 h-7 mx-auto mb-2" />Camera access requires localhost or HTTPS. Use the scanner input below if camera access is unavailable.</div>}
-          {cameraState === 'denied' && <div className="relative px-6 text-center text-white text-sm">Camera access was denied or the camera is in use. Allow permission, close other camera apps, or use the input below.</div>}
+          <LiveEquipmentScanner
+            onScan={handleCameraScan}
+            onError={handleCameraError}
+            constraints={{
+              facingMode: { ideal: 'environment' },
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+            }}
+            formats={[
+              'qr_code',
+              'code_128',
+              'code_39',
+              'code_93',
+              'data_matrix',
+            ]}
+            paused={!!pendingFloater || imageState === 'decoding'}
+            retryDelay={80}
+            sound
+            components={{ finder: true, torch: true, zoom: true, onOff: true }}
+            styles={{
+              container: { width: '100%', height: '100%' },
+              video: { width: '100%', height: '100%', objectFit: 'cover' },
+            }}
+          />
+          {cameraError && <div className="absolute inset-0 bg-black/85 px-6 text-center text-white text-sm flex flex-col items-center justify-center">
+            <Camera className="w-7 h-7 mb-2" />
+            <span>{cameraError}</span>
+          </div>}
         </div>
 
         {pendingFloater && <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 space-y-3">
