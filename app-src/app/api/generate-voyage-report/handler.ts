@@ -16,7 +16,7 @@ import {
   vesselNameSchema,
   voyageDefinitionSchema,
 } from '@/lib/voyage/schemas';
-import { generateVoyageWorkbook, loadVoyageTemplateData } from '@/lib/voyage/template';
+import { generateVoyageWorkbook } from '@/lib/voyage/template';
 import { parseVoyageUploadRequest } from '@/lib/voyage/upload';
 import { detectedVesselNames, vesselFileStem } from '@/lib/voyage/vessel';
 
@@ -41,12 +41,11 @@ export async function POST(request: NextRequest) {
 
   try {
     const { formData, dailyLogs: uploadedLogs } = await parseVoyageUploadRequest(request, { allowEmpty: true });
-    const templateData = await loadVoyageTemplateData();
     const definitions = parseJsonField(
       formData,
       'voyages',
       z.array(voyageDefinitionSchema).min(1).max(100),
-      templateData.definitions,
+      [],
       150_000,
     );
     const manualInputs = parseJsonField(
@@ -72,13 +71,6 @@ export async function POST(request: NextRequest) {
       throw new Error(`The uploaded files contain more than one vessel: ${detectedVessels.join(', ')}.`);
     }
 
-    for (const daily of uploadedLogs) {
-      const metadata = templateData.dailyMetadata.get(daily.date);
-      if (metadata) {
-        daily.location = metadata.location;
-        daily.activity = metadata.activity;
-      }
-    }
     const allDailyLogs = mergeDailyLogs([...savedLogs, ...uploadedLogs], manualInputs, vesselName);
     if (allDailyLogs.length === 0) throw new Error('Add a manual entry or upload at least one daily report.');
     const confirmedDefinitions = definitions.filter((definition) => definition.confirmed !== false);

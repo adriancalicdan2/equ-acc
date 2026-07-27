@@ -3,7 +3,6 @@ import { authorizeRequest } from '@/lib/server/auth';
 import { enforceRateLimit } from '@/lib/server/rateLimit';
 import { calculateVoyages } from '@/lib/voyage/calculations';
 import { suggestVoyageDefinitions } from '@/lib/voyage/detection';
-import { loadVoyageTemplateData } from '@/lib/voyage/template';
 import { parseVoyageUploadRequest } from '@/lib/voyage/upload';
 import { detectedVesselNames } from '@/lib/voyage/vessel';
 
@@ -17,17 +16,7 @@ async function authorize(request: NextRequest, operation: string) {
 export async function GET(request: NextRequest) {
   const authorization = await authorize(request, 'load-voyage-template');
   if (!authorization.authorized) return authorization.response;
-  try {
-    const { definitions } = await loadVoyageTemplateData();
-    return NextResponse.json({
-      dailyLogs: [],
-      voyages: calculateVoyages([], definitions),
-      warnings: [],
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unable to load the vessel report template.';
-    return NextResponse.json({ error: message }, { status: 500 });
-  }
+  return NextResponse.json({ dailyLogs: [], voyages: [], warnings: [] });
 }
 
 export async function POST(request: NextRequest) {
@@ -39,15 +28,7 @@ export async function POST(request: NextRequest) {
     if (detectedVessels.length > 1) {
       throw new Error(`The uploaded files contain more than one vessel: ${detectedVessels.join(', ')}.`);
     }
-    const { definitions, dailyMetadata } = await loadVoyageTemplateData();
-    for (const daily of dailyLogs) {
-      const metadata = dailyMetadata.get(daily.date);
-      if (metadata) {
-        daily.location = metadata.location;
-        daily.activity = metadata.activity;
-      }
-    }
-    const selectedDefinitions = definitions.length > 0 ? definitions : suggestVoyageDefinitions(dailyLogs);
+    const selectedDefinitions = suggestVoyageDefinitions(dailyLogs);
     const voyages = calculateVoyages(dailyLogs, selectedDefinitions);
     const warnings = [
       ...dailyLogs.flatMap((daily) => daily.warnings.map((warning) => `${daily.date}: ${warning}`)),
