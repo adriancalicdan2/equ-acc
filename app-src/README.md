@@ -52,6 +52,8 @@ firebase deploy --only firestore:rules
 
 Client-side page guards improve navigation but are not a substitute for deploying the Firestore rules.
 
+The Daily Logs & Voyages page stores vessel history in IndexedDB for the signed-in account on the current browser and device. Users can load a saved date range and append later Excel or manual entries. Existing dates are preserved, and duplicate dates are not overwritten.
+
 ## Deployment
 
 Netlify configuration lives at `../netlify.toml`. The build base is `app-src`, and report templates are packaged under `public/templates` for server-side generation.

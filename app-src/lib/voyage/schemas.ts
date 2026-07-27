@@ -35,3 +35,41 @@ export const voyageDefinitionSchema = z.object({
 });
 
 export const reportDateSchema = z.string().regex(/^20\d{2}-(0[1-9]|1[0-2])-([0-2]\d|3[01])$/);
+
+const operatingIntervalSchema = z.object({
+  start: z.iso.datetime(),
+  end: z.iso.datetime(),
+  durationHours: boundedNumber,
+});
+
+const componentSummarySchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  category: z.enum([
+    'port-main-engine',
+    'starboard-main-engine',
+    'auxiliary-engine',
+    'emergency-engine',
+    'other',
+  ]),
+  workingHours: boundedNumber,
+  fuel: boundedNumber,
+  occurrences: z.number().int().min(0).max(100_000),
+  intervals: z.array(operatingIntervalSchema).max(1_000),
+});
+
+export const dailyLogRecordSchema = z.object({
+  source: z.enum(['excel', 'manual']),
+  fileName: z.string().trim().min(1).max(260),
+  vesselName: vesselNameSchema,
+  date: reportDateSchema,
+  location: z.string().trim().max(200),
+  activity: z.string().trim().max(300),
+  portHours: boundedNumber,
+  starboardHours: boundedNumber,
+  mainEngineFuel: boundedNumber,
+  auxiliaryEngineFuel: boundedNumber,
+  ancillaryFuel: boundedNumber,
+  totalFuel: boundedNumber,
+  components: z.array(componentSummarySchema).max(200),
+  warnings: z.array(z.string().max(1_000)).max(200),
+});
