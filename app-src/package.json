@@ -21,7 +21,7 @@
     "docxtemplater-image-module-free": "^1.1.1",
     "exceljs": "^4.4.0",
     "firebase": "^10.14.1",
-    "firebase-admin": "^14.0.0",
+    "firebase-admin": "13.10.0",
     "html2canvas-pro": "^2.0.4",
     "html2pdf.js": "^0.14.0",
     "jspdf": "^4.2.1",
