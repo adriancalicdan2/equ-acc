@@ -9,6 +9,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { classifyEquipmentSerial, FloaterType } from '@/lib/equipmentScanner';
+import {
+  equipmentAccountabilityCopy,
+  type EquipmentLanguage,
+} from '@/lib/equipment/accountabilityI18n';
 
 const LiveEquipmentScanner = dynamic(
   () => import('@yudiel/react-qr-scanner').then(module => module.Scanner),
@@ -35,10 +39,12 @@ async function createEquipmentCodeReader(tryHarder = false) {
   });
 }
 
-export function EquipmentCodeScanner({ disabled, onScan }: {
+export function EquipmentCodeScanner({ disabled, onScan, language = 'en' }: {
   disabled?: boolean;
   onScan: (serial: string, floaterType?: FloaterType) => boolean;
+  language?: EquipmentLanguage;
 }) {
+  const copy = equipmentAccountabilityCopy[language].scanner;
   const [open, setOpen] = useState(false);
   const [manualValue, setManualValue] = useState('');
   const [pendingFloater, setPendingFloater] = useState<string | null>(null);
@@ -56,7 +62,7 @@ export function EquipmentCodeScanner({ disabled, onScan }: {
   const acceptValue = (rawValue: string) => {
     const classified = classifyEquipmentSerial(rawValue);
     if (!classified) {
-      setFeedback({ type: 'error', message: 'Unknown device code. Expected SP1, S2, NR, SD, or Z at the start.' });
+      setFeedback({ type: 'error', message: copy.unknownCode });
       return;
     }
     if (classified.category === 'floater') {
@@ -67,21 +73,29 @@ export function EquipmentCodeScanner({ disabled, onScan }: {
     }
     if (onScanRef.current(classified.serial)) {
       setManualValue('');
-      setFeedback({ type: 'success', message: `${classified.serial} added to ${classified.label}.` });
+      const chineseLabels = {
+        capacitance: '电容式燃油传感器',
+        floater: '浮子式燃油传感器',
+        network: '无线网络发射器',
+        engine: '工时监测设备',
+        solar: '太阳能终端',
+      };
+      const label = language === 'zh' ? chineseLabels[classified.category] : classified.label;
+      setFeedback({ type: 'success', message: copy.addedTo(classified.serial, label) });
     } else {
-      setFeedback({ type: 'error', message: `${classified.serial} could not be added. Check the notification for details.` });
+      setFeedback({ type: 'error', message: copy.couldNotAdd(classified.serial) });
     }
   };
 
   const chooseFloaterType = (type: FloaterType) => {
     if (!pendingFloater) return;
     if (onScanRef.current(pendingFloater, type)) {
-      setFeedback({ type: 'success', message: `${pendingFloater} added as Floater ${type}.` });
+      setFeedback({ type: 'success', message: copy.addedFloater(pendingFloater, type) });
       setManualValue('');
       pendingFloaterRef.current = null;
       setPendingFloater(null);
     } else {
-      setFeedback({ type: 'error', message: `${pendingFloater} could not be added. Check the notification for details.` });
+      setFeedback({ type: 'error', message: copy.couldNotAdd(pendingFloater) });
     }
   };
 
@@ -96,13 +110,13 @@ export function EquipmentCodeScanner({ disabled, onScan }: {
 
   const handleCameraError = (error: IScannerError) => {
     const cameraErrorMessages: Partial<Record<IScannerError['kind'], string>> = {
-      'permission-denied': 'Camera permission was denied. Allow camera access in your browser settings.',
-      'insecure-context': 'Camera access requires localhost or HTTPS.',
-      'no-camera': 'No camera was found on this device.',
-      'in-use': 'The camera is being used by another application.',
-      unsupported: 'Camera scanning is not supported by this browser.',
+      'permission-denied': copy.cameraDenied,
+      'insecure-context': copy.cameraHttps,
+      'no-camera': copy.noCamera,
+      'in-use': copy.cameraInUse,
+      unsupported: copy.cameraUnsupported,
     };
-    setCameraError(cameraErrorMessages[error.kind] ?? error.message ?? 'The camera could not be started.');
+    setCameraError(cameraErrorMessages[error.kind] ?? error.message ?? copy.cameraFailed);
   };
 
   const close = () => {
@@ -125,12 +139,12 @@ export function EquipmentCodeScanner({ disabled, onScan }: {
     const file = input.files?.[0];
     if (!file || pendingFloater) return;
     if (!file.type.startsWith('image/')) {
-      setFeedback({ type: 'error', message: 'Please choose an image containing a QR code or barcode.' });
+      setFeedback({ type: 'error', message: copy.imageRequired });
       input.value = '';
       return;
     }
     if (file.size > 15 * 1024 * 1024) {
-      setFeedback({ type: 'error', message: 'The photo is larger than 15 MB. Please choose a smaller image.' });
+      setFeedback({ type: 'error', message: copy.imageTooLarge });
       input.value = '';
       return;
     }
@@ -146,7 +160,7 @@ export function EquipmentCodeScanner({ disabled, onScan }: {
     } catch {
       setFeedback({
         type: 'error',
-        message: 'No readable equipment code was found. Try a sharper, well-lit photo with the entire code visible.',
+        message: copy.unreadableImage,
       });
     } finally {
       URL.revokeObjectURL(imageUrl);
@@ -158,17 +172,17 @@ export function EquipmentCodeScanner({ disabled, onScan }: {
 
   return <>
     <Button type="button" disabled={disabled} onClick={() => setOpen(true)} className="h-10 bg-emerald-600 hover:bg-emerald-500 text-white">
-      <ScanLine className="w-4 h-4 mr-2" /> Scan equipment QR / barcode
+      <ScanLine className="w-4 h-4 mr-2" /> {copy.open}
     </Button>
 
     {open && typeof document !== 'undefined' && createPortal(<div className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm p-4 flex items-center justify-center" role="dialog" aria-modal="true" aria-labelledby="equipment-scanner-title">
       <div className="w-full max-w-lg max-h-[95vh] overflow-y-auto rounded-2xl border border-border bg-card p-5 shadow-2xl space-y-4">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 id="equipment-scanner-title" className="font-bold text-lg">Scan equipment code</h2>
-            <p className="text-xs text-muted-foreground">The serial prefix selects the correct equipment section.</p>
+            <h2 id="equipment-scanner-title" className="font-bold text-lg">{copy.title}</h2>
+            <p className="text-xs text-muted-foreground">{copy.subtitle}</p>
           </div>
-          <button type="button" aria-label="Close scanner" onClick={close} className="p-2 rounded-lg hover:bg-muted"><X className="w-4 h-4" /></button>
+          <button type="button" aria-label={copy.close} onClick={close} className="p-2 rounded-lg hover:bg-muted"><X className="w-4 h-4" /></button>
         </div>
 
         <div className="relative aspect-video overflow-hidden rounded-xl border border-border bg-black flex items-center justify-center">
@@ -203,12 +217,12 @@ export function EquipmentCodeScanner({ disabled, onScan }: {
         </div>
 
         {pendingFloater && <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 space-y-3">
-          <div><p className="text-sm font-semibold">Choose the floater type</p><p className="text-xs text-muted-foreground mt-1 font-mono">{pendingFloater}</p></div>
+          <div><p className="text-sm font-semibold">{copy.chooseFloater}</p><p className="text-xs text-muted-foreground mt-1 font-mono">{pendingFloater}</p></div>
           <div className="grid grid-cols-2 gap-3">
             <Button type="button" onClick={() => chooseFloaterType('AM')} className="bg-blue-600 hover:bg-blue-500 text-white">AM</Button>
             <Button type="button" onClick={() => chooseFloaterType('AR')} className="bg-blue-600 hover:bg-blue-500 text-white">AR</Button>
           </div>
-          <button type="button" onClick={() => { pendingFloaterRef.current = null; setPendingFloater(null); setFeedback(null); }} className="text-xs text-muted-foreground hover:text-foreground">Cancel this scan</button>
+          <button type="button" onClick={() => { pendingFloaterRef.current = null; setPendingFloater(null); setFeedback(null); }} className="text-xs text-muted-foreground hover:text-foreground">{copy.cancelScan}</button>
         </div>}
 
         {feedback && <div aria-live="polite" className={`rounded-lg border px-3 py-2 text-sm flex items-start gap-2 ${feedback.type === 'success' ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600' : 'border-destructive/30 bg-destructive/10 text-destructive'}`}>
@@ -217,26 +231,26 @@ export function EquipmentCodeScanner({ disabled, onScan }: {
 
         <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-2">
           <div>
-            <p className="text-sm font-semibold">Scan from a photo</p>
-            <p className="text-xs text-muted-foreground">Choose a clear image from this device. The photo is processed only in your browser.</p>
+            <p className="text-sm font-semibold">{copy.scanPhoto}</p>
+            <p className="text-xs text-muted-foreground">{copy.photoDescription}</p>
           </div>
-          <input ref={imageInputRef} type="file" accept="image/*" onChange={uploadCodePhoto} disabled={imageState === 'decoding' || !!pendingFloater} className="sr-only" aria-label="Upload QR code or barcode photo" />
+          <input ref={imageInputRef} type="file" accept="image/*" onChange={uploadCodePhoto} disabled={imageState === 'decoding' || !!pendingFloater} className="sr-only" aria-label={copy.uploadAria} />
           <Button type="button" variant="outline" disabled={imageState === 'decoding' || !!pendingFloater} onClick={() => imageInputRef.current?.click()} className="w-full">
             {imageState === 'decoding' ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <ImagePlus className="w-4 h-4 mr-2" />}
-            {imageState === 'decoding' ? 'Reading photo...' : 'Upload QR / barcode photo'}
+            {imageState === 'decoding' ? copy.readingPhoto : copy.uploadPhoto}
           </Button>
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="scanner-input">USB/Bluetooth scanner or manual serial</Label>
+          <Label htmlFor="scanner-input">{copy.manualLabel}</Label>
           <div className="flex gap-2">
-            <Input id="scanner-input" autoFocus disabled={!!pendingFloater} value={manualValue} onChange={event => setManualValue(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); submitManual(); } }} placeholder="Scan here or type the serial number" />
-            <Button type="button" disabled={!manualValue.trim() || !!pendingFloater} onClick={submitManual}>Add</Button>
+            <Input id="scanner-input" autoFocus disabled={!!pendingFloater} value={manualValue} onChange={event => setManualValue(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); submitManual(); } }} placeholder={copy.manualPlaceholder} />
+            <Button type="button" disabled={!manualValue.trim() || !!pendingFloater} onClick={submitManual}>{copy.add}</Button>
           </div>
-          <p className="text-[11px] text-muted-foreground">Accepted prefixes: SP1, S2, NR, SD, and Z. Press Enter after manual entry.</p>
+          <p className="text-[11px] text-muted-foreground">{copy.acceptedPrefixes}</p>
         </div>
 
-        <div className="flex justify-end"><Button type="button" variant="outline" onClick={close}>Done</Button></div>
+        <div className="flex justify-end"><Button type="button" variant="outline" onClick={close}>{copy.done}</Button></div>
       </div>
     </div>, document.body)}
   </>;

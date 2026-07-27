@@ -23,36 +23,29 @@ import { cn } from '@/lib/utils';
 import { firestore } from '@/lib/firebase/client';
 import { useAuth } from '@/lib/firebase/AuthContext';
 import { authenticatedFetch } from '@/lib/firebase/authenticatedFetch';
-import { diffEquipmentReports, equipmentChangeSummary } from '@/lib/equipment/changeTracking';
+import { diffEquipmentReports } from '@/lib/equipment/changeTracking';
+import {
+  EQUIPMENT_LANGUAGE_STORAGE_KEY,
+  equipmentAccountabilityCopy,
+  equipmentChangeSummaryForLanguage,
+  equipmentStatusLabel,
+  equipmentValidationMessage,
+  isEquipmentLanguage,
+  type EquipmentLanguage,
+} from '@/lib/equipment/accountabilityI18n';
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { EquipmentCodeScanner } from '@/components/form/EquipmentCodeScanner';
 import { classifyEquipmentSerial, FloaterType, nextEmptyIndex, nextFloaterIndex } from '@/lib/equipmentScanner';
 
 
-const COPY_OPTIONS: { value: CopyType; label: string; desc: string }[] = [
-  { value: 'aimf', label: 'AIMF Copy', desc: 'For AIMF Tech. Corp. records' },
-  { value: 'vessel', label: 'Vessel Copy', desc: 'For the vessel\'s own files' },
-  { value: 'vessel_owner', label: 'Vessel Owner Copy', desc: 'For the vessel owner' },
-  { value: 'likas', label: 'Likas Copy', desc: 'For Likas office records' },
-];
-
-const SECTIONS = [
-  { id: 'vessel', label: 'Vessel Info', icon: Ship },
-  { id: 'fls', label: 'Fuel Level Sensors', icon: Zap },
-  { id: 'network', label: 'Network & Telemetry', icon: Wifi },
-  { id: 'engine', label: 'Engine Monitoring', icon: FileText },
-  { id: 'solar', label: 'Solar Power', icon: Sun },
-  { id: 'remarks', label: 'Remarks', icon: StickyNote },
-];
-
-const FieldError = ({ name, errors }: { name: string; errors: any }) => {
+const FieldError = ({ name, errors, language }: { name: string; errors: any; language: EquipmentLanguage }) => {
   const parts = name.split('.');
   let err: any = errors;
   for (const p of parts) err = err?.[p];
   if (!err?.message) return null;
   return (
     <p className="text-xs text-destructive mt-1 flex items-center gap-1">
-      <AlertCircle className="w-3 h-3" /> {err.message}
+      <AlertCircle className="w-3 h-3" /> {equipmentValidationMessage(language, err.message)}
     </p>
   );
 };
@@ -137,13 +130,30 @@ function EquipmentAccountabilityContent() {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
+  const [language, setLanguage] = useState<EquipmentLanguage>('en');
+  const copy = equipmentAccountabilityCopy[language];
+  const ui = (english: string, chinese: string) => language === 'zh' ? chinese : english;
+  const copyOptions = (['aimf', 'vessel', 'vessel_owner', 'likas'] as const).map((value) => ({
+    value,
+    ...copy.copyOptions[value],
+  }));
+
+  useEffect(() => {
+    const savedLanguage = window.localStorage.getItem(EQUIPMENT_LANGUAGE_STORAGE_KEY);
+    if (isEquipmentLanguage(savedLanguage)) setLanguage(savedLanguage);
+  }, []);
+
+  const handleLanguageChange = (nextLanguage: EquipmentLanguage) => {
+    setLanguage(nextLanguage);
+    window.localStorage.setItem(EQUIPMENT_LANGUAGE_STORAGE_KEY, nextLanguage);
+  };
 
   const handleDownloadPDF = async () => {
     const element = previewRef.current;
     if (!element) return;
 
     try {
-       toast.loading('Generating PDF...', { id: 'pdf-generation' });
+       toast.loading(ui('Generating PDF...', '正在生成 PDF…'), { id: 'pdf-generation' });
        // @ts-ignore
        const html2canvas = (await import('html2canvas-pro')).default;
        // @ts-ignore
@@ -178,17 +188,10 @@ function EquipmentAccountabilityContent() {
        const vName = watch('vesselInfo.vesselName') || 'Equipment-Accountability-Report';
        pdf.save(`${vName.trim().replace(/[\/\\?%*:|"<>\u200b]/g, '-')}.pdf`);
 
-       toast.success('PDF downloaded successfully!', { id: 'pdf-generation' });
+       toast.success(ui('PDF downloaded successfully!', 'PDF 下载成功！'), { id: 'pdf-generation' });
     } catch (err: any) {
-      toast.error('PDF generation failed: ' + err.message, { id: 'pdf-generation' });
+      toast.error(ui('PDF generation failed: ', 'PDF 生成失败：') + err.message, { id: 'pdf-generation' });
     }
-  };
-
-  const COPY_LABELS: Record<string, string> = {
-    aimf: 'AIMF Copy',
-    vessel: 'Vessel Copy',
-    vessel_owner: 'Vessel Owner Copy',
-    likas: 'Likas Copy',
   };
 
   const handlePrintPreview = () => {
@@ -197,13 +200,13 @@ function EquipmentAccountabilityContent() {
 
     const selectedCopies = watchedCopyTypes ?? [];
     if (selectedCopies.length === 0) {
-      toast.error('Please select at least one copy type to print.');
+      toast.error(ui('Please select at least one copy type to print.', '请至少选择一种要打印的副本。'));
       return;
     }
 
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
-      toast.error('Please allow popups to print/download PDF');
+      toast.error(ui('Please allow popups to print/download PDF', '请允许弹出窗口，以便打印或下载 PDF。'));
       return;
     }
 
@@ -220,7 +223,7 @@ function EquipmentAccountabilityContent() {
       // Find the badge container and replace its content with the single copy label
       const badgeContainer = tempDiv.querySelector('[data-copy-badges]');
       if (badgeContainer) {
-        badgeContainer.innerHTML = `<span style="background:#dbeafe;color:#1e40af;font-weight:700;padding:2px 6px;border-radius:4px;font-size:9px;text-transform:uppercase;">${COPY_LABELS[ct] ?? ct}</span>`;
+        badgeContainer.innerHTML = `<span style="background:#dbeafe;color:#1e40af;font-weight:700;padding:2px 6px;border-radius:4px;font-size:9px;text-transform:uppercase;">${copy.copyOptions[ct].label}</span>`;
       }
 
       const isLast = idx === selectedCopies.length - 1;
@@ -270,11 +273,11 @@ function EquipmentAccountabilityContent() {
   useEffect(() => {
     if (user && !isAdmin && allowedViews && !allowedViews.includes('equipment-accountability')) {
       if (allowedViews.includes('petty-cash')) {
-        toast.error('Access Denied: Redirecting to Petty Cash.');
+        toast.error(language === 'zh' ? '访问被拒绝：正在转到备用金页面。' : 'Access Denied: Redirecting to Petty Cash.');
         router.push('/dashboard/petty-cash');
       }
     }
-  }, [user, isAdmin, allowedViews, router]);
+  }, [user, isAdmin, allowedViews, router, language]);
 
   const filteredReports = savedReports.filter((report) =>
     (report.vesselName || '').toLowerCase().includes(vesselSearchQuery.toLowerCase())
@@ -306,13 +309,13 @@ function EquipmentAccountabilityContent() {
         .filter((snapshotDoc) => snapshotDoc.data().archived !== true)
         .map((snapshotDoc) => ({
           id: snapshotDoc.id,
-          vesselName: snapshotDoc.data().vesselInfo?.vesselName || 'Unnamed Vessel',
+          vesselName: snapshotDoc.data().vesselInfo?.vesselName || (language === 'zh' ? '未命名船舶' : 'Unnamed Vessel'),
           installationDate: snapshotDoc.data().vesselInfo?.installationDate || '',
           data: snapshotDoc.data(),
         })));
     }, (error) => console.error('Error listening to reports:', error));
     return () => unsubscribe();
-  }, [user]);
+  }, [user, language]);
 
 
   const { register, handleSubmit, watch, setValue, reset, formState: { errors } } = useForm<AccountabilityFormValues>({
@@ -381,14 +384,14 @@ function EquipmentAccountabilityContent() {
   const handleEquipmentScan = (serial: string, floaterType?: FloaterType): boolean => {
     const classified = classifyEquipmentSerial(serial);
     if (!classified) {
-      toast.error('Unknown device code. Expected SP1, S2, NR, SD, or Z.');
+      toast.error(ui('Unknown device code. Expected SP1, S2, NR, SD, or Z.', '未知设备代码。应为 SP1、S2、NR、SD 或 Z。'));
       return false;
     }
 
     const normalized = classified.serial.toLowerCase();
     const currentSerials = [...capSns, ...floaterSns, ...networkSns, ...engineSns, ...solarSns];
     if (currentSerials.some(value => value.trim().toLowerCase() === normalized)) {
-      toast.error(`Serial number "${classified.serial}" is already in this form.`);
+      toast.error(ui(`Serial number "${classified.serial}" is already in this form.`, `序列号“${classified.serial}”已存在于此表格中。`));
       return false;
     }
 
@@ -396,7 +399,7 @@ function EquipmentAccountabilityContent() {
       if (report.id === selectedReportId) continue;
       const existing = getAllSerialNumbers(report.data).find(item => item.sn.trim().toLowerCase() === normalized);
       if (existing) {
-        toast.error(`Serial number "${classified.serial}" is already assigned to vessel "${report.vesselName}".`);
+        toast.error(ui(`Serial number "${classified.serial}" is already assigned to vessel "${report.vesselName}".`, `序列号“${classified.serial}”已分配给船舶“${report.vesselName}”。`));
         return false;
       }
     }
@@ -421,7 +424,7 @@ function EquipmentAccountabilityContent() {
       addStandardSerial(capSns, setCapSns, capQty, 'flsCapacitance.serialNumber', 'flsCapacitance.qty');
     } else if (classified.category === 'floater') {
       if (!floaterType) {
-        toast.error('Choose AM or AR for this floater.');
+        toast.error(ui('Choose AM or AR for this floater.', '请为此浮子选择 AM 或 AR。'));
         return false;
       }
       const destination = nextFloaterIndex(floaterSns, floaterQty, floaterType);
@@ -439,7 +442,7 @@ function EquipmentAccountabilityContent() {
       addStandardSerial(solarSns, setSolarSns, solarQty, 'solar.serialNumber', 'solar.qty');
     }
 
-    toast.success(`${classified.serial} added`, {
+    toast.success(ui(`${classified.serial} added`, `${classified.serial} 已添加`), {
       description: classified.category === 'floater' ? `${classified.label} (${floaterType})` : classified.label,
     });
     const sectionId = classified.category === 'capacitance' || classified.category === 'floater' ? 'fls' : classified.category;
@@ -457,7 +460,7 @@ function EquipmentAccountabilityContent() {
     const snValues = sns.map(i => i.sn.toLowerCase());
     const formDuplicates = snValues.filter((item, idx) => snValues.indexOf(item) !== idx);
     if (formDuplicates.length > 0) {
-      toast.error(`Duplicate Serial Numbers detected in form: ${[...new Set(formDuplicates)].join(', ')}`);
+      toast.error(ui(`Duplicate Serial Numbers detected in form: ${[...new Set(formDuplicates)].join(', ')}`, `表格中检测到重复序列号：${[...new Set(formDuplicates)].join(', ')}`));
       return false;
     }
     for (const report of savedReports) {
@@ -465,7 +468,7 @@ function EquipmentAccountabilityContent() {
       const otherSns = getAllSerialNumbers(report.data);
       for (const item of sns) {
         const matching = otherSns.find(o => o.sn.toLowerCase() === item.sn.toLowerCase());
-        if (matching) { toast.error(`Serial Number "${item.sn}" (${item.source}) is already registered to vessel "${report.vesselName}"`); return false; }
+        if (matching) { toast.error(ui(`Serial Number "${item.sn}" (${item.source}) is already registered to vessel "${report.vesselName}"`, `序列号“${item.sn}”（${item.source}）已登记到船舶“${report.vesselName}”`)); return false; }
       }
     }
     return true;
@@ -488,7 +491,7 @@ function EquipmentAccountabilityContent() {
     setCapTanks(['']); setFloaterTanks(['']); setEngineAssets(['']); setSolarLocations(['']);
     setValue('vesselInfo.installationDate', format(new Date(), 'MMMM d, yyyy'));
     setValue('signoff.signoffDate', format(new Date(), 'MMMM d, yyyy'));
-    toast.success('Form cleared!');
+    toast.success(ui('Form cleared!', '表格已清空！'));
   };
 
   const toggleCopyType = (ct: CopyType) => {
@@ -502,28 +505,31 @@ function EquipmentAccountabilityContent() {
     actionLabel: string,
   ) => {
     const changes = diffEquipmentReports(before, after);
-    const summary = equipmentChangeSummary(changes);
+    const summary = equipmentChangeSummaryForLanguage(language, changes);
     if (!window.confirm(`${actionLabel}
 
-Detected equipment / Inventory impact:
+${ui('Detected equipment / Inventory impact:', '检测到的设备 / 库存影响：')}
 ${summary}
 
-Continue and provide a reason?`)) return null;
-    const reason = window.prompt('Reason for this change (required for the audit trail):', actionLabel);
+${ui('Continue and provide a reason?', '是否继续并填写变更原因？')}`)) return null;
+    const reason = window.prompt(ui('Reason for this change (required for the audit trail):', '本次变更原因（审计记录必填）：'), actionLabel);
     if (!reason?.trim() || reason.trim().length < 3) {
-      toast.error('A reason of at least 3 characters is required.');
+      toast.error(ui('A reason of at least 3 characters is required.', '变更原因至少需要 3 个字符。'));
       return null;
     }
     const hasRemovedEquipment = changes.some((change) => change.removed.length > 0);
     let disposition = 'returned-working';
     if (hasRemovedEquipment) {
       const answer = window.prompt(
-        'Disposition for removed equipment: returned-working, returned-defective, lost, replacement, or correction',
+        ui(
+          'Disposition for removed equipment: returned-working, returned-defective, lost, replacement, or correction',
+          '已移除设备的处置方式（请输入以下英文选项之一）：returned-working、returned-defective、lost、replacement 或 correction',
+        ),
         'returned-working',
       );
       const allowed = ['returned-working', 'returned-defective', 'lost', 'replacement', 'correction'];
       if (!answer || !allowed.includes(answer.trim().toLowerCase())) {
-        toast.error('Choose a valid disposition for the removed equipment.');
+        toast.error(ui('Choose a valid disposition for the removed equipment.', '请为已移除的设备输入有效的处置方式。'));
         return null;
       }
       disposition = answer.trim().toLowerCase();
@@ -541,44 +547,44 @@ Continue and provide a reason?`)) return null;
     let result: { error?: string; reportId?: string } = {};
     if (text) {
       try { result = JSON.parse(text) as typeof result; }
-      catch { throw new Error(response.ok ? 'The server returned an invalid response.' : text); }
+      catch { throw new Error(response.ok ? ui('The server returned an invalid response.', '服务器返回了无效响应。') : text); }
     }
-    if (!response.ok) throw new Error(result.error ?? 'Unable to save the equipment change.');
+    if (!response.ok) throw new Error(result.error ?? ui('Unable to save the equipment change.', '无法保存设备变更。'));
     return result;
   };
 
   const handleSaveNewReport = async () => {
     const values = watch();
-    if (!values.vesselInfo?.vesselName) { toast.error('Vessel Name / IMO No. is required to save a report'); return; }
+    if (!values.vesselInfo?.vesselName) { toast.error(ui('Vessel Name / IMO No. is required to save a report', '保存报告前必须填写船名 / IMO 编号')); return; }
     if (!checkDuplicateSns(values)) return;
-    const confirmation = confirmEquipmentChange(null, values as unknown as Record<string, unknown>, 'Initial equipment deployment');
+    const confirmation = confirmEquipmentChange(null, values as unknown as Record<string, unknown>, ui('Initial equipment deployment', '首次设备部署'));
     if (!confirmation) return;
     setSaving(true);
     try {
       const docId = values.vesselInfo.vesselName.trim().replace(/[\/\\?%*:|"<>]/g, '-');
       await submitEquipmentChange({ action: 'create', reportId: docId, report: values, ...confirmation });
       setSelectedReportId(docId);
-      toast.success('Report saved and Inventory deployment ledger updated.');
+      toast.success(ui('Report saved and Inventory deployment ledger updated.', '报告已保存，库存部署台账已更新。'));
     } catch (e: unknown) {
-      toast.error('Failed to save report', { description: e instanceof Error ? e.message : 'Unknown error' });
+      toast.error(ui('Failed to save report', '报告保存失败'), { description: e instanceof Error ? e.message : ui('Unknown error', '未知错误') });
     } finally { setSaving(false); }
   };
 
   const handleUpdateReport = async () => {
-    if (!selectedReportId) { toast.error('No vessel selected to update'); return; }
+    if (!selectedReportId) { toast.error(ui('No vessel selected to update', '未选择要更新的船舶')); return; }
     const selected = savedReports.find((report) => report.id === selectedReportId);
-    if (!selected) { toast.error('The selected vessel report is no longer available.'); return; }
+    if (!selected) { toast.error(ui('The selected vessel report is no longer available.', '所选船舶报告已不可用。')); return; }
     const values = watch();
-    if (!values.vesselInfo?.vesselName) { toast.error('Vessel Name / IMO No. is required'); return; }
+    if (!values.vesselInfo?.vesselName) { toast.error(ui('Vessel Name / IMO No. is required', '船名 / IMO 编号为必填项')); return; }
     if (!checkDuplicateSns(values, selectedReportId)) return;
-    const confirmation = confirmEquipmentChange(selected.data, values as unknown as Record<string, unknown>, 'Update vessel equipment');
+    const confirmation = confirmEquipmentChange(selected.data, values as unknown as Record<string, unknown>, ui('Update vessel equipment', '更新船舶设备'));
     if (!confirmation) return;
     setSaving(true);
     try {
       await submitEquipmentChange({ action: 'update', reportId: selectedReportId, report: values, ...confirmation });
-      toast.success('Equipment changes confirmed, audited, and synchronized to Inventory.');
+      toast.success(ui('Equipment changes confirmed, audited, and synchronized to Inventory.', '设备变更已确认、审计并同步到库存。'));
     } catch (e: unknown) {
-      toast.error('Failed to update report', { description: e instanceof Error ? e.message : 'Unknown error' });
+      toast.error(ui('Failed to update report', '报告更新失败'), { description: e instanceof Error ? e.message : ui('Unknown error', '未知错误') });
     } finally { setSaving(false); }
   };
 
@@ -586,15 +592,15 @@ Continue and provide a reason?`)) return null;
     if (!selectedReportId) return;
     const selected = savedReports.find((report) => report.id === selectedReportId);
     if (!selected) return;
-    const confirmation = confirmEquipmentChange(selected.data, null, `Archive ${selected.vesselName}`);
+    const confirmation = confirmEquipmentChange(selected.data, null, ui(`Archive ${selected.vesselName}`, `归档 ${selected.vesselName}`));
     if (!confirmation) return;
     setSaving(true);
     try {
       await submitEquipmentChange({ action: 'archive', reportId: selectedReportId, ...confirmation });
-      toast.success('Vessel archived. Its equipment was removed from active deployment and logged.');
+      toast.success(ui('Vessel archived. Its equipment was removed from active deployment and logged.', '船舶已归档；其设备已从当前部署中移除并记录。'));
       handleClear();
     } catch (e: unknown) {
-      toast.error('Failed to archive vessel', { description: e instanceof Error ? e.message : 'Unknown error' });
+      toast.error(ui('Failed to archive vessel', '船舶归档失败'), { description: e instanceof Error ? e.message : ui('Unknown error', '未知错误') });
     } finally { setSaving(false); }
   };
 
@@ -616,7 +622,7 @@ Continue and provide a reason?`)) return null;
     setEngineAssets(report.data.engine?.connectedEngines?.split(', ') || ['']);
     setSolarSns(report.data.solar?.serialNumber?.split(', ') || ['']);
     setSolarLocations(report.data.solar?.installationLocation?.split(', ') || ['']);
-    toast.success('Form filled with saved vessel info!');
+    toast.success(ui('Form filled with saved vessel info!', '已载入保存的船舶资料！'));
   };
 
   useEffect(() => {
@@ -656,7 +662,7 @@ Continue and provide a reason?`)) return null;
       fd.append('remarks', values.remarks?.trim() || 'Installation done properly');
       fd.append('copyTypes', JSON.stringify(values.copyTypes));
       const res = await authenticatedFetch('/api/generate-docx', { method: 'POST', body: fd });
-      if (!res.ok) { const err = await res.json(); throw new Error(err.error ?? 'Generation failed'); }
+      if (!res.ok) { const err = await res.json(); throw new Error(err.error ?? ui('Generation failed', '生成失败')); }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -664,9 +670,9 @@ Continue and provide a reason?`)) return null;
       a.download = `${(values.vesselInfo?.vesselName || 'Equipment-Accountability-Report').trim().replace(/[\/\\?%*:|"<>]/g, '-')}.zip`;
       a.click();
       URL.revokeObjectURL(url);
-      toast.success('Report Generated!', { description: `${values.copyTypes.length} DOCX ${values.copyTypes.length === 1 ? 'copy' : 'copies'} downloaded as a ZIP file.` });
+      toast.success(ui('Report Generated!', '报告已生成！'), { description: language === 'zh' ? `已将 ${values.copyTypes.length} 个 DOCX 副本打包为 ZIP 文件下载。` : `${values.copyTypes.length} DOCX ${values.copyTypes.length === 1 ? 'copy' : 'copies'} downloaded as a ZIP file.` });
     } catch (e: unknown) {
-      toast.error('Generation Failed', { description: e instanceof Error ? e.message : 'Unknown error' });
+      toast.error(ui('Generation Failed', '生成失败'), { description: e instanceof Error ? e.message : ui('Unknown error', '未知错误') });
     } finally { setLoading(false); }
   };
 
@@ -678,27 +684,42 @@ Continue and provide a reason?`)) return null;
         <div className="w-16 h-16 rounded-full bg-red-500/10 border border-red-500/30 flex items-center justify-center text-red-500 mb-2 animate-pulse">
           <AlertCircle className="w-8 h-8" />
         </div>
-        <h2 className="text-xl font-bold text-foreground">Access Denied</h2>
+        <h2 className="text-xl font-bold text-foreground">{copy.accessDenied}</h2>
         <p className="text-muted-foreground text-sm max-w-sm">
-          You do not have permission to access the Equipment Accountability module. Please contact your system administrator to request access.
+          {copy.accessDeniedDescription}
         </p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen" lang={language === 'zh' ? 'zh-CN' : 'en'}>
       {/* Hero */}
-      <div className="max-w-5xl mx-auto px-4 pt-10 pb-6 text-center space-y-4 animate-fadeIn">
+      <div className="max-w-5xl mx-auto px-4 pt-6 pb-6 text-center space-y-4 animate-fadeIn">
+        <div className="flex justify-end">
+          <label htmlFor="equipment-language" className="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground">
+            <span>{copy.language}</span>
+            <select
+              id="equipment-language"
+              aria-label={copy.languageSelectorLabel}
+              value={language}
+              onChange={(event) => handleLanguageChange(event.target.value as EquipmentLanguage)}
+              className="h-10 min-w-32 rounded-lg border border-border bg-card px-3 text-sm text-foreground shadow-sm focus:border-primary/60 focus:outline-none focus:ring-2 focus:ring-primary/20"
+            >
+              <option value="en">{copy.english}</option>
+              <option value="zh">{copy.chinese}</option>
+            </select>
+          </label>
+        </div>
         <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-medium">
           <CheckCircle2 className="w-3.5 h-3.5" />
-          Post-Installation Hardware Deployment Report
+          {copy.heroKicker}
         </div>
         <h1 className="text-3xl md:text-4xl font-extrabold text-foreground">
-          Equipment Accountability Report
+          {copy.heroTitle}
         </h1>
         <p className="text-muted-foreground text-base max-w-2xl mx-auto">
-          Fill out the form and instantly download all three DOCX copies — AIMF, Vessel, and Vessel Owner — in a single ZIP file.
+          {copy.heroDescription}
         </p>
       </div>
 
@@ -707,23 +728,23 @@ Continue and provide a reason?`)) return null;
 
         <div className="bg-card/60 backdrop-blur-xl border border-border/80 rounded-2xl p-5 shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <p className="font-semibold text-sm">Add a device by scanning its label</p>
-            <p className="text-xs text-muted-foreground mt-1">SP1, S2, NR, SD, and Z serials go to the correct section automatically.</p>
+            <p className="font-semibold text-sm">{copy.scanHeading}</p>
+            <p className="text-xs text-muted-foreground mt-1">{copy.scanDescription}</p>
           </div>
-          <EquipmentCodeScanner disabled={loading || saving} onScan={handleEquipmentScan} />
+          <EquipmentCodeScanner disabled={loading || saving} onScan={handleEquipmentScan} language={language} />
         </div>
 
         {/* Controls */}
         <div className="bg-card/60 backdrop-blur-xl border border-border/80 rounded-2xl p-5 shadow-lg space-y-5">
           {/* Vessel Selector */}
           <div className="space-y-1.5 w-full relative" ref={dropdownRef}>
-            <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Select Saved Vessel Info</Label>
+            <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{copy.selectSavedVessel}</Label>
             <div className="flex flex-col md:flex-row gap-3 w-full items-start md:items-center">
               <div className="relative flex-1 min-w-[260px] max-w-md w-full">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white" />
                 <input
                   type="text"
-                  placeholder={savedReports.length > 0 ? 'Search/select a vessel...' : 'No saved vessels found'}
+                  placeholder={savedReports.length > 0 ? copy.searchVessel : copy.noSavedVessels}
                   value={vesselSearchQuery}
                   onFocus={() => setIsOpen(true)}
                   onChange={(e) => { setVesselSearchQuery(e.target.value); setIsOpen(true); }}
@@ -748,14 +769,14 @@ Continue and provide a reason?`)) return null;
                         <span className="font-medium">{report.vesselName}</span>
                         {report.installationDate && <span className="text-xs text-muted-foreground">{report.installationDate}</span>}
                       </button>
-                    )) : <div className="px-4 py-3 text-sm text-muted-foreground text-center">No vessels found</div>}
+                    )) : <div className="px-4 py-3 text-sm text-muted-foreground text-center">{copy.noVesselsFound}</div>}
                   </div>
                 )}
               </div>
               {selectedReportId && (
                 <div className="flex gap-2 animate-fadeInUp w-full md:w-auto">
-                  <Button type="button" variant="outline" onClick={handleUpdateReport} disabled={saving || loading} className="h-10 px-4 text-xs font-semibold rounded-lg bg-blue-600 border-blue-700 text-white hover:bg-blue-500 flex-1 md:flex-none">Update Selected</Button>
-                  <Button type="button" variant="outline" onClick={handleDeleteReport} disabled={saving || loading} className="h-10 px-4 text-xs font-semibold rounded-lg bg-red-700 border-red-800 text-white hover:bg-red-600 flex-1 md:flex-none">Archive Vessel</Button>
+                  <Button type="button" variant="outline" onClick={handleUpdateReport} disabled={saving || loading} className="h-10 px-4 text-xs font-semibold rounded-lg bg-blue-600 border-blue-700 text-white hover:bg-blue-500 flex-1 md:flex-none">{copy.updateSelected}</Button>
+                  <Button type="button" variant="outline" onClick={handleDeleteReport} disabled={saving || loading} className="h-10 px-4 text-xs font-semibold rounded-lg bg-red-700 border-red-800 text-white hover:bg-red-600 flex-1 md:flex-none">{copy.archiveVessel}</Button>
                 </div>
               )}
             </div>
@@ -763,21 +784,21 @@ Continue and provide a reason?`)) return null;
           <hr className="border-border/40" />
           {/* Action Buttons */}
           <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3 w-full">
-            <Button type="button" variant="outline" onClick={handleClear} disabled={loading || saving} className="h-10 px-4 text-xs font-semibold rounded-lg bg-slate-600 border-slate-700 text-white hover:bg-slate-500 w-full sm:w-auto">Clear Form</Button>
+            <Button type="button" variant="outline" onClick={handleClear} disabled={loading || saving} className="h-10 px-4 text-xs font-semibold rounded-lg bg-slate-600 border-slate-700 text-white hover:bg-slate-500 w-full sm:w-auto">{copy.clearForm}</Button>
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
               {!selectedReportId && (
                 <Button type="button" variant="outline" onClick={handleSaveNewReport} disabled={loading || saving} className="h-10 px-4 text-xs font-semibold rounded-lg bg-emerald-600 border-emerald-700 text-white hover:bg-emerald-500 w-full sm:w-auto flex items-center justify-center">
-                  {saving ? <><Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />Saving...</> : <><CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />Save as New</>}
+                  {saving ? <><Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />{copy.saving}</> : <><CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />{copy.saveAsNew}</>}
                 </Button>
               )}
               <Button type="button" onClick={handleDownloadPDF} className="h-10 px-4 text-xs font-semibold rounded-lg flex items-center justify-center bg-blue-600 border border-blue-700 text-white hover:bg-blue-500 w-full sm:w-auto">
-                <Download className="w-3.5 h-3.5 mr-1.5" /> Download PDF
+                <Download className="w-3.5 h-3.5 mr-1.5" /> {copy.downloadPdf}
               </Button>
               <Button type="button" onClick={handlePrintPreview} className="h-10 px-4 text-xs font-semibold rounded-lg flex items-center justify-center border border-border bg-transparent text-foreground hover:bg-muted w-full sm:w-auto">
-                <Printer className="w-3.5 h-3.5 mr-1.5" /> Print Preview
+                <Printer className="w-3.5 h-3.5 mr-1.5" /> {copy.printPreview}
               </Button>
               <Button type="submit" disabled={loading || saving} className="h-10 px-5 text-xs font-semibold rounded-lg flex items-center justify-center bg-blue-600 border-blue-700 text-white hover:bg-blue-500 w-full sm:w-auto">
-                {loading ? <><Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />Generating...</> : <><Download className="w-3.5 h-3.5 mr-1.5" />Generate & Download</>}
+                {loading ? <><Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />{copy.generating}</> : <><Download className="w-3.5 h-3.5 mr-1.5" />{copy.generateDownload}</>}
               </Button>
             </div>
           </div>
@@ -785,11 +806,11 @@ Continue and provide a reason?`)) return null;
           {/* Copy Selection */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Select Copies to Download</Label>
-              {errors.copyTypes && <p className="text-xs text-destructive flex items-center gap-1"><AlertCircle className="w-3 h-3" /> {errors.copyTypes.message}</p>}
+              <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{copy.selectCopies}</Label>
+              {errors.copyTypes && <p className="text-xs text-destructive flex items-center gap-1"><AlertCircle className="w-3 h-3" /> {equipmentValidationMessage(language, errors.copyTypes.message)}</p>}
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              {COPY_OPTIONS.map(opt => {
+              {copyOptions.map(opt => {
                 const selected = (watchedCopyTypes ?? []).includes(opt.value);
                 return (
                   <button key={opt.value} type="button" onClick={() => toggleCopyType(opt.value)}
@@ -800,7 +821,7 @@ Continue and provide a reason?`)) return null;
                       </span>
                       {opt.label}
                     </span>
-                    <span className="text-[10px] opacity-65 truncate max-w-[120px]">{opt.desc}</span>
+                    <span className="text-[10px] opacity-65 truncate max-w-[120px]">{opt.description}</span>
                   </button>
                 );
               })}
@@ -809,85 +830,85 @@ Continue and provide a reason?`)) return null;
         </div>
 
         {/* Vessel Info */}
-        <SectionCard id="vessel" icon={Ship} title="Vessel Information">
+        <SectionCard id="vessel" icon={Ship} title={copy.vesselInformation}>
           <div className="grid md:grid-cols-2 gap-5">
-            <Field label="Vessel Name / IMO No." error={!!errors.vesselInfo?.vesselName}>
-              <Input {...register('vesselInfo.vesselName')} placeholder="e.g. BTC MT MAKILING / IMO 1234567" className={inputCls} />
-              <FieldError name="vesselInfo.vesselName" errors={errors} />
+            <Field label={copy.vesselName} error={!!errors.vesselInfo?.vesselName}>
+              <Input {...register('vesselInfo.vesselName')} placeholder={copy.vesselNamePlaceholder} className={inputCls} />
+              <FieldError language={language} name="vesselInfo.vesselName" errors={errors} />
             </Field>
-            <Field label="Installation Date" error={!!errors.vesselInfo?.installationDate}>
-              <Input {...register('vesselInfo.installationDate')} placeholder="e.g. June 3, 2026" className={inputCls} />
-              <FieldError name="vesselInfo.installationDate" errors={errors} />
+            <Field label={copy.installationDate} error={!!errors.vesselInfo?.installationDate}>
+              <Input {...register('vesselInfo.installationDate')} placeholder={copy.installationDatePlaceholder} className={inputCls} />
+              <FieldError language={language} name="vesselInfo.installationDate" errors={errors} />
             </Field>
             <div className="md:col-span-2">
-              <Field label="Technician / Lead Engineer" error={!!errors.vesselInfo?.leadEngineer}>
-                <Input {...register('vesselInfo.leadEngineer')} placeholder="e.g. Melchor Adrian Calicdan & Jhiro Fronda" className={inputCls} />
-                <FieldError name="vesselInfo.leadEngineer" errors={errors} />
+              <Field label={copy.leadEngineer} error={!!errors.vesselInfo?.leadEngineer}>
+                <Input {...register('vesselInfo.leadEngineer')} placeholder={copy.leadEngineerPlaceholder} className={inputCls} />
+                <FieldError language={language} name="vesselInfo.leadEngineer" errors={errors} />
               </Field>
             </div>
           </div>
         </SectionCard>
 
         {/* FLS */}
-        <SectionCard id="fls" icon={Zap} title="1. Fuel Level Sensors (FLS)" badge="Section 1">
+        <SectionCard id="fls" icon={Zap} title={copy.fuelLevelSensors} badge={ui('Section 1', '第 1 节')}>
           <div>
-            <p className="text-sm font-semibold text-primary mb-3 flex items-center gap-2"><ChevronRight className="w-4 h-4" />Capacitance Fuel Sensor (VSP)</p>
+            <p className="text-sm font-semibold text-primary mb-3 flex items-center gap-2"><ChevronRight className="w-4 h-4" />{copy.capacitanceSensor}</p>
             <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <Field label="Qty" error={!!errors.flsCapacitance?.qty}>
+              <Field label={copy.quantity} error={!!errors.flsCapacitance?.qty}>
                 <QuantitySelector value={watch('flsCapacitance.qty') || '1'} onChange={val => setValue('flsCapacitance.qty', val, { shouldValidate: true })} />
-                <FieldError name="flsCapacitance.qty" errors={errors} />
+                <FieldError language={language} name="flsCapacitance.qty" errors={errors} />
               </Field>
               <div className="space-y-1.5 md:col-span-1">
-                <Label className={cn('text-sm font-medium', errors.flsCapacitance?.tankAssigned && 'text-destructive')}>Tanks Assigned ({capQty})</Label>
+                <Label className={cn('text-sm font-medium', errors.flsCapacitance?.tankAssigned && 'text-destructive')}>{copy.tanksAssigned} ({capQty})</Label>
                 <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
                   {capTanks.slice(0, capQty).map((tank, idx) => (
-                    <Input key={idx} value={tank} onChange={e => handleArrayChange(idx, e.target.value, capTanks, setCapTanks, 'flsCapacitance.tankAssigned')} placeholder={`Tank Assigned #${idx + 1}`} className={inputCls} />
+                    <Input key={idx} value={tank} onChange={e => handleArrayChange(idx, e.target.value, capTanks, setCapTanks, 'flsCapacitance.tankAssigned')} placeholder={`${copy.tankAssigned} #${idx + 1}`} className={inputCls} />
                   ))}
                 </div>
-                <FieldError name="flsCapacitance.tankAssigned" errors={errors} />
+                <FieldError language={language} name="flsCapacitance.tankAssigned" errors={errors} />
               </div>
               <div className="space-y-1.5 md:col-span-1">
-                <Label className={cn('text-sm font-medium', errors.flsCapacitance?.serialNumber && 'text-destructive')}>Serial Numbers ({capQty})</Label>
+                <Label className={cn('text-sm font-medium', errors.flsCapacitance?.serialNumber && 'text-destructive')}>{copy.serialNumbers} ({capQty})</Label>
                 <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
                   {capSns.slice(0, capQty).map((sn, idx) => (
                     <Input key={idx} value={sn} onChange={e => handleSnsChange(idx, e.target.value, capSns, setCapSns, 'flsCapacitance.serialNumber')} placeholder={`S/N #${idx + 1}`} className={inputCls} />
                   ))}
                 </div>
-                <FieldError name="flsCapacitance.serialNumber" errors={errors} />
+                <FieldError language={language} name="flsCapacitance.serialNumber" errors={errors} />
               </div>
-              <Field label="Calibration Status">
+              <Field label={copy.calibrationStatus}>
                 <select {...register('flsCapacitance.calibrationStatus')} className={cn('w-full rounded-lg border px-3 py-2 text-sm', inputCls)}>
-                  <option value="good">✔ Good Working Condition</option>
-                  <option value="defective">✘ Defective</option>
+                  <option value="good">{copy.goodWorkingCondition}</option>
+                  <option value="defective">{copy.defective}</option>
                 </select>
               </Field>
             </div>
           </div>
           <div className="border-t border-border pt-5">
-            <p className="text-sm font-semibold text-primary mb-3 flex items-center gap-2"><ChevronRight className="w-4 h-4" />Floater Fuel Sensor (SP)</p>
+            <p className="text-sm font-semibold text-primary mb-3 flex items-center gap-2"><ChevronRight className="w-4 h-4" />{copy.floaterSensor}</p>
             <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <Field label="Qty" error={!!errors.flsFloater?.qty}>
+              <Field label={copy.quantity} error={!!errors.flsFloater?.qty}>
                 <QuantitySelector value={watch('flsFloater.qty') || '1'} onChange={val => setValue('flsFloater.qty', val, { shouldValidate: true })} />
-                <FieldError name="flsFloater.qty" errors={errors} />
+                <FieldError language={language} name="flsFloater.qty" errors={errors} />
               </Field>
-              <Field label="Calibration Status">
+              <Field label={copy.calibrationStatus}>
                 <select {...register('flsFloater.calibrationStatus')} className={cn('w-full rounded-lg border px-3 py-2 text-sm', inputCls)}>
-                  <option value="good">✔ Good Working Condition</option>
-                  <option value="defective">✘ Defective</option>
+                  <option value="good">{copy.goodWorkingCondition}</option>
+                  <option value="defective">{copy.defective}</option>
                 </select>
               </Field>
               <div className="md:col-span-2 lg:col-span-4 space-y-4">
-                <Label className="text-sm font-semibold text-muted-foreground">Tanks & Devices (1 Tank Assigned = 2 Floaters: SP2.0AR(M) & SP2.0AR)</Label>
+                <Label className="text-sm font-semibold text-muted-foreground">{copy.tanksDevices}</Label>
                 <div className="grid md:grid-cols-2 gap-4">
                   {Array.from({ length: floaterQty }).map((_, tankIdx) => (
                     <div key={tankIdx} className="grid grid-cols-2 gap-4 p-4 border border-border/60 bg-muted/10 rounded-xl">
                       <div className="space-y-1.5">
-                        <Label className="text-xs font-semibold">Tank Assigned #{tankIdx + 1}</Label>
-                        <Input value={floaterTanks[tankIdx] || ''} onChange={e => handleArrayChange(tankIdx, e.target.value, floaterTanks, setFloaterTanks, 'flsFloater.tankAssigned')} placeholder="e.g. Port Fuel Tank" className={inputCls} />
-                        <FieldError name="flsFloater.tankAssigned" errors={errors} />
+                        <Label className="text-xs font-semibold">{copy.tankAssigned} #{tankIdx + 1}</Label>
+                        <Input value={floaterTanks[tankIdx] || ''} onChange={e => handleArrayChange(tankIdx, e.target.value, floaterTanks, setFloaterTanks, 'flsFloater.tankAssigned')} placeholder={copy.tankAssignedPlaceholder} className={inputCls} />
+                        <FieldError language={language} name="flsFloater.tankAssigned" errors={errors} />
                       </div>
                       <div className="space-y-2">
-                        <Label className="text-xs font-semibold block text-muted-foreground mb-1">Floater Serial Numbers</Label>
+                        <Label className="text-xs font-semibold block text-muted-foreground mb-1">{copy.floaterSerialNumbers}</Label>
                         <div className="space-y-2">
                           <div className="space-y-0.5">
                             <span className="text-[10px] text-primary font-medium block">SP2.0AR(M) S/N</span>
@@ -898,7 +919,7 @@ Continue and provide a reason?`)) return null;
                             <Input value={floaterSns[tankIdx * 2 + 1] || ''} onChange={e => handleSnsChange(tankIdx * 2 + 1, e.target.value, floaterSns, setFloaterSns, 'flsFloater.serialNumber')} placeholder="e.g. SN1002" className={inputCls} />
                           </div>
                         </div>
-                        <FieldError name="flsFloater.serialNumber" errors={errors} />
+                        <FieldError language={language} name="flsFloater.serialNumber" errors={errors} />
                       </div>
                     </div>
                   ))}
@@ -909,107 +930,107 @@ Continue and provide a reason?`)) return null;
         </SectionCard>
 
         {/* Network */}
-        <SectionCard id="network" icon={Wifi} title="2. Network & Telemetry Infrastructure" badge="Section 2">
-          <p className="text-sm text-muted-foreground -mt-1">Device: <span className="text-foreground font-medium">Wireless Network Transmitter (NR)</span></p>
+        <SectionCard id="network" icon={Wifi} title={copy.networkTitle} badge={ui('Section 2', '第 2 节')}>
+          <p className="text-sm text-muted-foreground -mt-1">{copy.device}: <span className="text-foreground font-medium">{copy.wirelessNetwork}</span></p>
           <div className="grid md:grid-cols-3 gap-4">
-            <Field label="Qty" error={!!errors.network?.qty}>
+            <Field label={copy.quantity} error={!!errors.network?.qty}>
               <QuantitySelector value={watch('network.qty') || '1'} onChange={val => setValue('network.qty', val, { shouldValidate: true })} />
-              <FieldError name="network.qty" errors={errors} />
+              <FieldError language={language} name="network.qty" errors={errors} />
             </Field>
             <div className="space-y-1.5 md:col-span-1">
-              <Label className={cn('text-sm font-medium', errors.network?.serialNumber && 'text-destructive')}>Serial Numbers ({networkQty})</Label>
+              <Label className={cn('text-sm font-medium', errors.network?.serialNumber && 'text-destructive')}>{copy.serialNumbers} ({networkQty})</Label>
               <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
                 {networkSns.slice(0, networkQty).map((sn, idx) => (
                   <Input key={idx} value={sn} onChange={e => handleSnsChange(idx, e.target.value, networkSns, setNetworkSns, 'network.serialNumber')} placeholder={`S/N #${idx + 1}`} className={inputCls} />
                 ))}
               </div>
-              <FieldError name="network.serialNumber" errors={errors} />
+              <FieldError language={language} name="network.serialNumber" errors={errors} />
             </div>
-            <Field label="Signal Strength / Status">
+            <Field label={copy.signalStrength}>
               <select {...register('network.signalStatus')} className={cn('w-full rounded-lg border px-3 py-2 text-sm', inputCls)}>
-                <option value="excellent">✔ Excellent</option>
-                <option value="good">✔ Good</option>
-                <option value="poor">✘ Poor</option>
+                <option value="excellent">{copy.excellent}</option>
+                <option value="good">{copy.good}</option>
+                <option value="poor">{copy.poor}</option>
               </select>
             </Field>
           </div>
         </SectionCard>
 
         {/* Engine */}
-        <SectionCard id="engine" icon={FileText} title="3. Engine Operations & Working Hours Monitoring" badge="Section 3">
-          <p className="text-sm text-muted-foreground -mt-1">Device: <span className="text-foreground font-medium">Working Hours Monitoring Device (SD)</span></p>
+        <SectionCard id="engine" icon={FileText} title={copy.engineTitle} badge={ui('Section 3', '第 3 节')}>
+          <p className="text-sm text-muted-foreground -mt-1">{copy.device}: <span className="text-foreground font-medium">{copy.workingHoursDevice}</span></p>
           <div className="grid md:grid-cols-3 gap-4">
-            <Field label="Qty" error={!!errors.engine?.qty}>
+            <Field label={copy.quantity} error={!!errors.engine?.qty}>
               <QuantitySelector value={watch('engine.qty') || '1'} onChange={val => setValue('engine.qty', val, { shouldValidate: true })} />
-              <FieldError name="engine.qty" errors={errors} />
+              <FieldError language={language} name="engine.qty" errors={errors} />
             </Field>
             <div className="space-y-1.5 md:col-span-1">
-              <Label className={cn('text-sm font-medium', errors.engine?.serialNumber && 'text-destructive')}>Serial Numbers ({engineQty})</Label>
+              <Label className={cn('text-sm font-medium', errors.engine?.serialNumber && 'text-destructive')}>{copy.serialNumbers} ({engineQty})</Label>
               <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
                 {engineSns.slice(0, engineQty).map((sn, idx) => (
                   <Input key={idx} value={sn} onChange={e => handleSnsChange(idx, e.target.value, engineSns, setEngineSns, 'engine.serialNumber')} placeholder={`S/N #${idx + 1}`} className={inputCls} />
                 ))}
               </div>
-              <FieldError name="engine.serialNumber" errors={errors} />
+              <FieldError language={language} name="engine.serialNumber" errors={errors} />
             </div>
             <div className="space-y-1.5 md:col-span-1">
-              <Label className={cn('text-sm font-medium', errors.engine?.connectedEngines && 'text-destructive')}>Connected Engines / Assets ({engineQty})</Label>
+              <Label className={cn('text-sm font-medium', errors.engine?.connectedEngines && 'text-destructive')}>{copy.connectedEngines} ({engineQty})</Label>
               <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
                 {engineAssets.slice(0, engineQty).map((asset, idx) => (
-                  <Input key={idx} value={asset} onChange={e => handleArrayChange(idx, e.target.value, engineAssets, setEngineAssets, 'engine.connectedEngines')} placeholder={`Connected Engine #${idx + 1}`} className={inputCls} />
+                  <Input key={idx} value={asset} onChange={e => handleArrayChange(idx, e.target.value, engineAssets, setEngineAssets, 'engine.connectedEngines')} placeholder={`${copy.connectedEngine} #${idx + 1}`} className={inputCls} />
                 ))}
               </div>
-              <FieldError name="engine.connectedEngines" errors={errors} />
+              <FieldError language={language} name="engine.connectedEngines" errors={errors} />
             </div>
           </div>
         </SectionCard>
 
         {/* Solar */}
-        <SectionCard id="solar" icon={Sun} title="4. Solar Power & Energy Storage Deployment" badge="Section 4">
-          <p className="text-sm text-muted-foreground -mt-1">Device: <span className="text-foreground font-medium">Wireless Solar Panel with Power Storage Device (Terminal)</span></p>
+        <SectionCard id="solar" icon={Sun} title={copy.solarTitle} badge={ui('Section 4', '第 4 节')}>
+          <p className="text-sm text-muted-foreground -mt-1">{copy.device}: <span className="text-foreground font-medium">{copy.solarDevice}</span></p>
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Field label="Qty" error={!!errors.solar?.qty}>
+            <Field label={copy.quantity} error={!!errors.solar?.qty}>
               <QuantitySelector value={watch('solar.qty') || '1'} onChange={val => setValue('solar.qty', val, { shouldValidate: true })} />
-              <FieldError name="solar.qty" errors={errors} />
+              <FieldError language={language} name="solar.qty" errors={errors} />
             </Field>
             <div className="space-y-1.5 md:col-span-1">
-              <Label className={cn('text-sm font-medium', errors.solar?.installationLocation && 'text-destructive')}>Installation Locations ({solarQty})</Label>
+              <Label className={cn('text-sm font-medium', errors.solar?.installationLocation && 'text-destructive')}>{copy.installationLocations} ({solarQty})</Label>
               <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
                 {solarLocations.slice(0, solarQty).map((loc, idx) => (
-                  <Input key={idx} value={loc} onChange={e => handleArrayChange(idx, e.target.value, solarLocations, setSolarLocations, 'solar.installationLocation')} placeholder={`Location #${idx + 1}`} className={inputCls} />
+                  <Input key={idx} value={loc} onChange={e => handleArrayChange(idx, e.target.value, solarLocations, setSolarLocations, 'solar.installationLocation')} placeholder={`${copy.location} #${idx + 1}`} className={inputCls} />
                 ))}
               </div>
-              <FieldError name="solar.installationLocation" errors={errors} />
+              <FieldError language={language} name="solar.installationLocation" errors={errors} />
             </div>
             <div className="space-y-1.5 md:col-span-1">
-              <Label className={cn('text-sm font-medium', errors.solar?.serialNumber && 'text-destructive')}>Serial Numbers ({solarQty})</Label>
+              <Label className={cn('text-sm font-medium', errors.solar?.serialNumber && 'text-destructive')}>{copy.serialNumbers} ({solarQty})</Label>
               <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
                 {solarSns.slice(0, solarQty).map((sn, idx) => (
                   <Input key={idx} value={sn} onChange={e => handleSnsChange(idx, e.target.value, solarSns, setSolarSns, 'solar.serialNumber')} placeholder={`S/N #${idx + 1}`} className={inputCls} />
                 ))}
               </div>
-              <FieldError name="solar.serialNumber" errors={errors} />
+              <FieldError language={language} name="solar.serialNumber" errors={errors} />
             </div>
-            <Field label="Initial Battery / Power Status">
+            <Field label={copy.powerStatus}>
               <select {...register('solar.powerStatus')} className={cn('w-full rounded-lg border px-3 py-2 text-sm', inputCls)}>
-                <option value="fully_charged">✔ Fully Charged</option>
-                <option value="charging">✔ Charging</option>
-                <option value="operational">✔ Operational</option>
+                <option value="fully_charged">{copy.fullyCharged}</option>
+                <option value="charging">{copy.charging}</option>
+                <option value="operational">{copy.operationalOption}</option>
               </select>
             </Field>
           </div>
         </SectionCard>
 
         {/* Remarks */}
-        <SectionCard id="remarks" icon={StickyNote} title="5. Remarks & Exceptions">
-          <p className="text-sm text-muted-foreground -mt-1">Note any environmental conditions, deviations, or outstanding tasks.</p>
-          <Textarea {...register('remarks')} placeholder="Enter remarks here, or leave blank to use: 'Installation done properly'…" rows={4} className={cn(inputCls, 'resize-none')} />
+        <SectionCard id="remarks" icon={StickyNote} title={copy.remarksTitle}>
+          <p className="text-sm text-muted-foreground -mt-1">{copy.remarksDescription}</p>
+          <Textarea {...register('remarks')} placeholder={copy.remarksPlaceholder} rows={4} className={cn(inputCls, 'resize-none')} />
         </SectionCard>
 
         {/* Bottom Live Preview */}
         <div className="space-y-4 pt-8 border-t border-border/40">
           <div className="text-xs font-semibold text-muted-foreground tracking-wider uppercase text-center">
-            Equipment Deployed Accountability Report Live Preview
+            {copy.previewLabel}
           </div>
 
           <div
@@ -1019,14 +1040,14 @@ Continue and provide a reason?`)) return null;
             {/* Header */}
             <div className="flex justify-between items-start border-b-2 border-neutral-200 pb-4 mb-6">
               <div>
-                <h2 className="text-lg font-black uppercase text-neutral-800 tracking-tight">Equipment Accountability Report</h2>
-                <p className="text-[10px] text-neutral-500 font-medium">Post-Hardware Installation Deployment Records</p>
+                <h2 className="text-lg font-black uppercase text-neutral-800 tracking-tight">{copy.previewTitle}</h2>
+                <p className="text-[10px] text-neutral-500 font-medium">{copy.previewSubtitle}</p>
               </div>
               <div className="text-right">
-                <span className="text-[9px] uppercase font-bold text-neutral-400 block">Active Copies</span>
+                <span className="text-[9px] uppercase font-bold text-neutral-400 block">{copy.activeCopies}</span>
                 <div data-copy-badges className="flex gap-1 mt-1 justify-end">
                   {(watchedCopyTypes || []).map(ct => (
-                    <span key={ct} className="bg-blue-100 text-blue-800 font-bold px-1.5 py-0.5 rounded text-[8px] uppercase">{ct}</span>
+                    <span key={ct} className="bg-blue-100 text-blue-800 font-bold px-1.5 py-0.5 rounded text-[8px] uppercase">{copy.copyOptions[ct].label}</span>
                   ))}
                 </div>
               </div>
@@ -1035,15 +1056,15 @@ Continue and provide a reason?`)) return null;
             {/* Metadata Section */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-neutral-50 p-4 rounded-lg border border-neutral-100 mb-6 text-neutral-700">
               <div>
-                <span className="text-[9px] uppercase font-bold text-neutral-400 block">Vessel Name / IMO No.</span>
+                <span className="text-[9px] uppercase font-bold text-neutral-400 block">{copy.vesselName}</span>
                 <span className="font-bold text-neutral-800 text-sm">{watch('vesselInfo.vesselName') || '—'}</span>
               </div>
               <div>
-                <span className="text-[9px] uppercase font-bold text-neutral-400 block">Installation Date</span>
+                <span className="text-[9px] uppercase font-bold text-neutral-400 block">{copy.installationDate}</span>
                 <span className="font-semibold text-neutral-800">{watch('vesselInfo.installationDate') || '—'}</span>
               </div>
               <div>
-                <span className="text-[9px] uppercase font-bold text-neutral-400 block">Technician / Lead Engineer</span>
+                <span className="text-[9px] uppercase font-bold text-neutral-400 block">{copy.leadEngineer}</span>
                 <span className="font-semibold text-neutral-800">{watch('vesselInfo.leadEngineer') || '—'}</span>
               </div>
             </div>
@@ -1053,53 +1074,53 @@ Continue and provide a reason?`)) return null;
               <table className="w-full text-left border-collapse text-neutral-700">
                 <thead>
                   <tr className="bg-neutral-100 border-b border-neutral-200 text-neutral-600 font-bold uppercase tracking-wider text-[9px]">
-                    <th className="px-4 py-2">Hardware Category & Device</th>
-                    <th className="px-4 py-2 text-center w-20">Qty</th>
-                    <th className="px-4 py-2">Tanks / Locations Connected</th>
-                    <th className="px-4 py-2">Serial Numbers</th>
-                    <th className="px-4 py-2 w-32">Status / Calibration</th>
+                    <th className="px-4 py-2">{copy.hardwareCategory}</th>
+                    <th className="px-4 py-2 text-center w-20">{copy.quantity}</th>
+                    <th className="px-4 py-2">{copy.tanksLocations}</th>
+                    <th className="px-4 py-2">{copy.serialNumbers}</th>
+                    <th className="px-4 py-2 w-32">{copy.statusCalibration}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-neutral-100 text-[11px]">
                   {/* Capacitance */}
                   <tr>
-                    <td className="px-4 py-2 font-medium text-neutral-800">FLS Capacitance Fuel Sensor (VPS1.2)</td>
+                    <td className="px-4 py-2 font-medium text-neutral-800">{ui('FLS Capacitance Fuel Sensor (VPS1.2)', 'FLS 电容式燃油传感器 (VPS1.2)')}</td>
                     <td className="px-4 py-2 text-center font-bold">{capSns.some(s => s.trim() !== '') ? capQty : 0}</td>
                     <td className="px-4 py-2 text-neutral-600">{watch('flsCapacitance.tankAssigned') || '—'}</td>
                     <td className="px-4 py-2 font-mono text-neutral-600">{watch('flsCapacitance.serialNumber') || '—'}</td>
-                    <td className="px-4 py-2 text-neutral-600 uppercase font-semibold text-[10px]">{watch('flsCapacitance.calibrationStatus')}</td>
+                    <td className="px-4 py-2 text-neutral-600 uppercase font-semibold text-[10px]">{equipmentStatusLabel(language, watch('flsCapacitance.calibrationStatus'))}</td>
                   </tr>
                   {/* Floater */}
                   <tr>
-                    <td className="px-4 py-2 font-medium text-neutral-800">FLS Floater Fuel Sensor (SP2.0AR)</td>
+                    <td className="px-4 py-2 font-medium text-neutral-800">{ui('FLS Floater Fuel Sensor (SP2.0AR)', 'FLS 浮子式燃油传感器 (SP2.0AR)')}</td>
                     <td className="px-4 py-2 text-center font-bold">{floaterSns.some(s => s.trim() !== '') ? floaterQty * 2 : 0}</td>
                     <td className="px-4 py-2 text-neutral-600">{watch('flsFloater.tankAssigned') || '—'}</td>
                     <td className="px-4 py-2 font-mono text-neutral-600">{watch('flsFloater.serialNumber') || '—'}</td>
-                    <td className="px-4 py-2 text-neutral-600 uppercase font-semibold text-[10px]">{watch('flsFloater.calibrationStatus')}</td>
+                    <td className="px-4 py-2 text-neutral-600 uppercase font-semibold text-[10px]">{equipmentStatusLabel(language, watch('flsFloater.calibrationStatus'))}</td>
                   </tr>
                   {/* Network NR */}
                   <tr>
-                    <td className="px-4 py-2 font-medium text-neutral-800">Wireless Network Transmitter (NR)</td>
+                    <td className="px-4 py-2 font-medium text-neutral-800">{copy.wirelessNetwork}</td>
                     <td className="px-4 py-2 text-center font-bold">{networkSns.some(s => s.trim() !== '') ? networkQty : 0}</td>
                     <td className="px-4 py-2 text-neutral-600">—</td>
                     <td className="px-4 py-2 font-mono text-neutral-600">{watch('network.serialNumber') || '—'}</td>
-                    <td className="px-4 py-2 text-neutral-600 uppercase font-semibold text-[10px]">Signal: {watch('network.signalStatus')}</td>
+                    <td className="px-4 py-2 text-neutral-600 uppercase font-semibold text-[10px]">{copy.signal}: {equipmentStatusLabel(language, watch('network.signalStatus'))}</td>
                   </tr>
                   {/* Engine SD */}
                   <tr>
-                    <td className="px-4 py-2 font-medium text-neutral-800">Working Hours Monitoring Device (SD)</td>
+                    <td className="px-4 py-2 font-medium text-neutral-800">{copy.workingHoursDevice}</td>
                     <td className="px-4 py-2 text-center font-bold">{engineSns.some(s => s.trim() !== '') ? engineQty : 0}</td>
                     <td className="px-4 py-2 text-neutral-600">{watch('engine.connectedEngines') || '—'}</td>
                     <td className="px-4 py-2 font-mono text-neutral-600">{watch('engine.serialNumber') || '—'}</td>
-                    <td className="px-4 py-2 text-neutral-600 uppercase font-semibold text-[10px]">Operational</td>
+                    <td className="px-4 py-2 text-neutral-600 uppercase font-semibold text-[10px]">{copy.operational}</td>
                   </tr>
                   {/* Solar panel */}
                   <tr>
-                    <td className="px-4 py-2 font-medium text-neutral-800">Wireless Solar Panel with Power Storage</td>
+                    <td className="px-4 py-2 font-medium text-neutral-800">{ui('Wireless Solar Panel with Power Storage', '带储能装置的无线太阳能板')}</td>
                     <td className="px-4 py-2 text-center font-bold">{solarSns.some(s => s.trim() !== '') ? solarQty : 0}</td>
                     <td className="px-4 py-2 text-neutral-600">{watch('solar.installationLocation') || '—'}</td>
                     <td className="px-4 py-2 font-mono text-neutral-600">{watch('solar.serialNumber') || '—'}</td>
-                    <td className="px-4 py-2 text-neutral-600 uppercase font-semibold text-[10px]">{watch('solar.powerStatus')}</td>
+                    <td className="px-4 py-2 text-neutral-600 uppercase font-semibold text-[10px]">{equipmentStatusLabel(language, watch('solar.powerStatus'))}</td>
                   </tr>
                 </tbody>
               </table>
@@ -1107,9 +1128,9 @@ Continue and provide a reason?`)) return null;
 
             {/* Remarks */}
             <div className="bg-neutral-50 border border-neutral-200 rounded-lg p-4 mb-6">
-              <h4 className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider mb-2">Remarks & Exceptions</h4>
+              <h4 className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider mb-2">{copy.remarksTitle.replace(/^5\.\s*/, '')}</h4>
               <p className="whitespace-pre-wrap text-xs text-neutral-800 leading-relaxed min-h-[3rem]">
-                {watch('remarks') || 'Installation done properly.'}
+                {watch('remarks') || copy.installationDone}
               </p>
             </div>
 
@@ -1118,11 +1139,11 @@ Continue and provide a reason?`)) return null;
               <div className="grid grid-cols-2 gap-16 text-center text-neutral-700">
                 <div className="space-y-2">
                   <div className="border-b border-neutral-300 mx-auto w-48 h-8 font-serif text-sm italic flex items-end justify-center pb-1 text-neutral-800">{watch('vesselInfo.leadEngineer')}</div>
-                  <div className="text-[9px] uppercase font-bold text-neutral-500">Released / Installed By (Technician)</div>
+                  <div className="text-[9px] uppercase font-bold text-neutral-500">{copy.releasedBy}</div>
                 </div>
                 <div className="space-y-2">
                   <div className="border-b border-neutral-300 mx-auto w-48 h-8"></div>
-                  <div className="text-[9px] uppercase font-bold text-neutral-500">Received By (Vessel Representative)</div>
+                  <div className="text-[9px] uppercase font-bold text-neutral-500">{copy.receivedBy}</div>
                 </div>
               </div>
             </div>
@@ -1131,7 +1152,7 @@ Continue and provide a reason?`)) return null;
       </form>
 
       <footer className="border-t border-border py-6 text-center text-xs text-muted-foreground/50">
-        Equipment Accountability Report · AIMF Tech. Corp. ©{new Date().getFullYear()}
+        {copy.footer} · AIMF Tech. Corp. ©{new Date().getFullYear()}
       </footer>
     </div>
   );
