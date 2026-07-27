@@ -5,6 +5,7 @@ import JSZip from 'jszip';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { DailyLogRecord, VoyageResult } from './types';
+import { verifyVoyageSummaryPopulation } from './workbookValidation';
 
 const TEMPLATE_NAME = 'Daily_Logs_&Voyage.xlsx';
 
@@ -235,6 +236,18 @@ export async function generateVoyageWorkbook(
   const dailySheet = workbook.getWorksheet('Daily log');
   if (!voyageSheet || !dailySheet) throw new Error('The vessel report template is missing required worksheets.');
 
+  voyageSheet.state = 'visible';
+  dailySheet.state = 'visible';
+  workbook.views = [{
+    x: 0,
+    y: 0,
+    width: 24_000,
+    height: 12_000,
+    firstSheet: 0,
+    activeTab: 0,
+    visibility: 'visible',
+  }];
+
   const sourceVoyageStyleRow = 5;
   const sourceVoyageTotalStyleRow = 39;
   for (let rowNumber = 5; rowNumber <= 38; rowNumber += 2) {
@@ -417,5 +430,7 @@ export async function generateVoyageWorkbook(
   workbook.calcProperties.fullCalcOnLoad = true;
 
   const generated = await workbook.xlsx.writeBuffer();
-  return preserveTemplateCharts(generated, voyages.length, sortedDaily);
+  const preserved = await preserveTemplateCharts(generated, voyages.length, sortedDaily);
+  await verifyVoyageSummaryPopulation(preserved, voyages.length);
+  return preserved;
 }

@@ -84,8 +84,10 @@ export async function POST(request: NextRequest) {
       status: 200,
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'Content-Disposition': `attachment; filename="${vesselFileStem(vesselName)}-${dateFrom}-to-${dateTo}.xlsx"`,
+        'Content-Disposition': `attachment; filename="${vesselFileStem(vesselName)}-${dateFrom}-to-${dateTo}-${filteredVoyages.length}-voyages.xlsx"`,
         'Cache-Control': 'no-store',
+        'X-AIMF-Voyage-Count': String(filteredVoyages.length),
+        'X-AIMF-Daily-Count': String(filteredDailyLogs.length),
       },
     });
   } catch (error) {
