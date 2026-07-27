@@ -81,9 +81,12 @@ export async function POST(request: NextRequest) {
     }
     const allDailyLogs = mergeDailyLogs([...savedLogs, ...uploadedLogs], manualInputs, vesselName);
     if (allDailyLogs.length === 0) throw new Error('Add a manual entry or upload at least one daily report.');
-    const allVoyages = calculateVoyages(allDailyLogs, definitions);
+    const confirmedDefinitions = definitions.filter((definition) => definition.confirmed !== false);
+    if (confirmedDefinitions.length === 0) throw new Error('Confirm at least one voyage window before downloading.');
+    const allVoyages = calculateVoyages(allDailyLogs, confirmedDefinitions);
     const filteredDailyLogs = allDailyLogs.filter((daily) => dailyInDateRange(daily, dateFrom, dateTo));
     const filteredVoyages = allVoyages.filter((voyage) => voyageInDateRange(voyage, dateFrom, dateTo));
+    if (filteredVoyages.length === 0) throw new Error('No confirmed voyage overlaps the selected date range. Review or add a voyage first.');
     const buffer = await generateVoyageWorkbook(filteredDailyLogs, filteredVoyages, vesselName);
     return new NextResponse(Buffer.from(buffer), {
       status: 200,

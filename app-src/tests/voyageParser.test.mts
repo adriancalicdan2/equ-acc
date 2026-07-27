@@ -126,7 +126,7 @@ function voyage(
   };
 }
 
-test('voyages use all AE units and exclude emergency/other fuel', () => {
+test('voyages combine all AEs and other machines as Other Fuel without double-counting ME time', () => {
   const logs = [
     dailyRecord('2026-05-29', 500, 650, 1_800),
     dailyRecord('2026-05-30', 350, 900, 1_800),
@@ -137,9 +137,14 @@ test('voyages use all AE units and exclude emergency/other fuel', () => {
   ]);
 
   assert.equal(results[0].mainEngineFuel, 400);
-  assert.equal(results[0].auxiliaryEngineFuel, 500);
-  assert.equal(results[0].totalFuel, 900);
+  assert.equal(results[0].otherFuel, 650);
+  assert.equal(results[0].totalFuel, 1_050);
+  assert.equal(results[0].mainEngineRunningHours, 2);
+  assert.equal(results[0].interruptionHours, 0);
   assert.equal(results[1].mainEngineFuel, 2_200);
-  assert.equal(results[1].auxiliaryEngineFuel, 425);
-  assert.equal(results[1].totalFuel, 2_625);
+  assert.equal(results[1].otherFuel, 775);
+  assert.equal(results[1].totalFuel, 2_975);
+  assert.equal(results[1].mainEngineRunningHours, 12);
+  assert.equal(results[1].interruptionHours, 14);
+  assert.match(results[1].warnings.join(' '), /not split automatically/i);
 });

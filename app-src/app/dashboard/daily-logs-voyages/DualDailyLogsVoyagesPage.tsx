@@ -31,6 +31,7 @@ import {
   type SavedVesselHistorySummary,
 } from '@/lib/voyage/vesselHistoryClient';
 import { calculateVoyages } from '@/lib/voyage/calculations';
+import { suggestVoyageDefinitions } from '@/lib/voyage/detection';
 import { duplicateDailyLogDates, vesselHistoryId } from '@/lib/voyage/history';
 import {
   dailyInDateRange,
@@ -87,8 +88,12 @@ function voyageDefinition(voyage: VoyageResult): VoyageDefinition {
     arrival: voyage.arrival,
     distance: voyage.distance,
     averageSpeed: voyage.averageSpeed,
+    status: voyage.status ?? 'completed',
+    source: voyage.source ?? 'template',
+    confirmed: voyage.confirmed ?? true,
+    interruptionReason: voyage.interruptionReason ?? '',
     mainEngineFuelOverride: voyage.mainEngineFuelOverride ?? null,
-    auxiliaryEngineFuelOverride: voyage.auxiliaryEngineFuelOverride ?? null,
+    otherFuelOverride: voyage.otherFuelOverride ?? voyage.auxiliaryEngineFuelOverride ?? null,
   };
 }
 
@@ -205,6 +210,10 @@ export default function DualDailyLogsVoyagesPage() {
       : allVoyages,
     [allVoyages, dateFrom, dateTo, rangeValid],
   );
+  const downloadableVoyages = useMemo(
+    () => filteredVoyages.filter((voyage) => voyage.confirmed !== false),
+    [filteredVoyages],
+  );
   const warnings = useMemo(() => [
     ...filteredDailyLogs.flatMap((daily) => daily.warnings.map((warning) => `${daily.date}: ${warning}`)),
     ...filteredVoyages.flatMap((voyage) => voyage.warnings.map((warning) => `${voyage.id}: ${warning}`)),
@@ -212,18 +221,18 @@ export default function DualDailyLogsVoyagesPage() {
   const dailyTotals = useMemo(() => filteredDailyLogs.reduce(
     (totals, daily) => ({
       main: totals.main + daily.mainEngineFuel,
-      auxiliary: totals.auxiliary + daily.auxiliaryEngineFuel,
+      other: totals.other + daily.ancillaryFuel,
       total: totals.total + daily.totalFuel,
     }),
-    { main: 0, auxiliary: 0, total: 0 },
+    { main: 0, other: 0, total: 0 },
   ), [filteredDailyLogs]);
   const voyageTotals = useMemo(() => filteredVoyages.reduce(
     (totals, voyage) => ({
       main: totals.main + voyage.mainEngineFuel,
-      auxiliary: totals.auxiliary + voyage.auxiliaryEngineFuel,
+      other: totals.other + voyage.otherFuel,
       total: totals.total + voyage.totalFuel,
     }),
-    { main: 0, auxiliary: 0, total: 0 },
+    { main: 0, other: 0, total: 0 },
   ), [filteredVoyages]);
 
   const applyFullRange = (records = dailyLogs) => {
@@ -433,17 +442,89 @@ export default function DualDailyLogsVoyagesPage() {
     )));
   };
 
+  const addManualVoyage = () => {
+    const range = fullDateRange(dailyLogs);
+    if (!range) {
+      toast.error('Add daily data before adding a voyage.');
+      return;
+    }
+    const nextNumber = definitions.reduce((max, definition) => {
+      const number = Number(definition.id.replace(/\D/g, ''));
+      return Number.isFinite(number) ? Math.max(max, number) : max;
+    }, 0) + 1;
+    setDefinitions((current) => [...current, {
+      id: `V${nextNumber}`,
+      cycle: Math.ceil(nextNumber / 2),
+      displayCycle: nextNumber % 2 === 1,
+      from: '',
+      to: '',
+      departure: `${range.from}T00:00:00.000Z`,
+      arrival: `${range.to}T23:59:59.000Z`,
+      distance: 0,
+      averageSpeed: 0,
+      status: 'planned',
+      source: 'manual',
+      confirmed: false,
+      interruptionReason: '',
+      mainEngineFuelOverride: null,
+      otherFuelOverride: null,
+    }]);
+  };
+
+  const suggestVoyages = () => {
+    const suggestions = suggestVoyageDefinitions(dailyLogs);
+    if (suggestions.length === 0) {
+      toast.error('No main-engine operating intervals were found. Add a voyage manually.');
+      return;
+    }
+    setDefinitions((current) => {
+      const preserved = current.filter((definition) => definition.source !== 'suggested');
+      return [
+        ...preserved,
+        ...suggestions.map((suggestion, index) => ({
+          ...suggestion,
+          id: `V${preserved.length + index + 1}`,
+          cycle: Math.ceil((preserved.length + index + 1) / 2),
+          displayCycle: (preserved.length + index) % 2 === 0,
+        })),
+      ];
+    });
+    toast.success(`Created ${suggestions.length} unconfirmed voyage suggestion${suggestions.length === 1 ? '' : 's'}.`);
+  };
+
+  const mergeWithPreviousVoyage = (id: string) => {
+    setDefinitions((current) => {
+      const index = current.findIndex((definition) => definition.id === id);
+      if (index <= 0) return current;
+      const previous = current[index - 1];
+      const selected = current[index];
+      return current
+        .map((definition, definitionIndex) => definitionIndex === index - 1 ? {
+          ...previous,
+          arrival: selected.arrival,
+          to: selected.to || previous.to,
+          confirmed: false,
+          interruptionReason: previous.interruptionReason || 'Merged after voyage interruption review',
+        } : definition)
+        .filter((_, definitionIndex) => definitionIndex !== index);
+    });
+  };
+
   const generate = async () => {
     if (!vesselName.trim()) {
       toast.error('Enter the vessel name before generating.');
       return;
     }
     if (dailyLogs.length === 0 || definitions.length === 0) {
-      toast.error('Add manual daily values or analyze Excel reports before generating.');
+      toast.error('Add daily values and at least one voyage before generating.');
       return;
     }
     if (!rangeValid) {
       toast.error('Select a valid From and To date range.');
+      return;
+    }
+    if (downloadableVoyages.length === 0) {
+      toast.error('Confirm at least one voyage that overlaps the selected date range.');
       return;
     }
     setGenerating(true);
@@ -654,8 +735,7 @@ export default function DualDailyLogsVoyagesPage() {
               <label className="space-y-1 text-xs text-muted-foreground">Port ME hours<Input type="number" min="0" max="24" step="0.01" value={manualDraft.portHours} onChange={(event) => updateManualDraft('portHours', parseNonNegative(event.target.value))} /></label>
               <label className="space-y-1 text-xs text-muted-foreground">STBD ME hours<Input type="number" min="0" max="24" step="0.01" value={manualDraft.starboardHours} onChange={(event) => updateManualDraft('starboardHours', parseNonNegative(event.target.value))} /></label>
               <label className="space-y-1 text-xs text-muted-foreground">ME fuel (L)<Input type="number" min="0" step="0.01" value={manualDraft.mainEngineFuel} onChange={(event) => updateManualDraft('mainEngineFuel', parseNonNegative(event.target.value))} /></label>
-              <label className="space-y-1 text-xs text-muted-foreground">All AE fuel (L)<Input type="number" min="0" step="0.01" value={manualDraft.auxiliaryEngineFuel} onChange={(event) => updateManualDraft('auxiliaryEngineFuel', parseNonNegative(event.target.value))} /></label>
-              <label className="space-y-1 text-xs text-muted-foreground">Other fuel (L)<Input type="number" min="0" step="0.01" value={manualDraft.otherFuel} onChange={(event) => updateManualDraft('otherFuel', parseNonNegative(event.target.value))} /></label>
+              <label className="space-y-1 text-xs text-muted-foreground">Other Fuel — all AEs & other machines (L)<Input type="number" min="0" step="0.01" value={manualDraft.otherFuel} onChange={(event) => updateManualDraft('otherFuel', parseNonNegative(event.target.value))} /></label>
               <div className="flex items-end"><Button type="button" onClick={addManualEntry} className="h-10 w-full gap-2 rounded-xl"><Plus className="h-4 w-4" />Add daily entry</Button></div>
             </div>
             <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
@@ -685,7 +765,7 @@ export default function DualDailyLogsVoyagesPage() {
               {!rangeValid && <p className="mt-3 text-xs font-medium text-destructive">Choose a valid From date that is not after the To date.</p>}
               {rangeValid && (
                 <p className="mt-3 text-xs text-primary">
-                  Selected output: {filteredDailyLogs.length} daily entr{filteredDailyLogs.length === 1 ? 'y' : 'ies'} and {filteredVoyages.length} voyage{filteredVoyages.length === 1 ? '' : 's'}.
+                  Selected output: {filteredDailyLogs.length} daily entr{filteredDailyLogs.length === 1 ? 'y' : 'ies'} and {downloadableVoyages.length} confirmed voyage{downloadableVoyages.length === 1 ? '' : 's'}.
                 </p>
               )}
             </section>
@@ -694,7 +774,7 @@ export default function DualDailyLogsVoyagesPage() {
               {[
                 { label: 'Daily entries', value: String(filteredDailyLogs.length), note: `${savedLogs.length} saved / ${uploadedLogs.length} new Excel / ${manualInputs.length} new manual` },
                 { label: 'Daily total fuel', value: `${numberFormat.format(dailyTotals.total)} L`, note: `${numberFormat.format(dailyTotals.main)} L main engines` },
-                { label: 'Voyage total fuel', value: `${numberFormat.format(voyageTotals.total)} L`, note: `${numberFormat.format(voyageTotals.auxiliary)} L all AE` },
+                { label: 'Voyage total fuel', value: `${numberFormat.format(voyageTotals.total)} L`, note: `${numberFormat.format(voyageTotals.other)} L Other Fuel` },
                 { label: 'Validation warnings', value: String(warnings.length), note: warnings.length === 0 ? 'Ready to generate' : 'Review highlighted items' },
               ].map((card) => (
                 <div key={card.label} className="rounded-2xl border border-border/80 bg-card/60 p-4 shadow-lg">
@@ -732,7 +812,7 @@ export default function DualDailyLogsVoyagesPage() {
                 <table className="min-w-[1120px] w-full text-xs">
                   <thead className="bg-muted/40 text-muted-foreground">
                     <tr>
-                      {['Source', 'Date', 'Location', 'Activity', 'Port h', 'STBD h', 'ME fuel', 'All AE fuel', 'Other fuel', 'Day total', 'Status', ''].map((heading, index) => (
+                      {['Source', 'Date', 'Location', 'Activity', 'Port h', 'STBD h', 'ME fuel', 'Other Fuel', 'Day total', 'Status', ''].map((heading, index) => (
                         <th key={`${heading}:${index}`} className="px-3 py-3 text-left font-semibold">{heading}</th>
                       ))}
                     </tr>
@@ -747,8 +827,7 @@ export default function DualDailyLogsVoyagesPage() {
                         <td className="px-3 py-2.5 text-right">{numberFormat.format(daily.portHours)}</td>
                         <td className="px-3 py-2.5 text-right">{numberFormat.format(daily.starboardHours)}</td>
                         <td className="px-3 py-2.5 text-right">{numberFormat.format(daily.mainEngineFuel)}</td>
-                        <td className="px-3 py-2.5 text-right text-sky-300">{numberFormat.format(daily.auxiliaryEngineFuel)}</td>
-                        <td className="px-3 py-2.5 text-right">{numberFormat.format(daily.ancillaryFuel - daily.auxiliaryEngineFuel)}</td>
+                        <td className="px-3 py-2.5 text-right text-sky-300">{numberFormat.format(daily.ancillaryFuel)}</td>
                         <td className="px-3 py-2.5 text-right font-semibold">{numberFormat.format(daily.totalFuel)}</td>
                         <td className="px-3 py-2.5"><span className={cn('rounded-full px-2 py-1 text-[10px] font-semibold', daily.warnings.length > 0 ? 'bg-amber-500/15 text-amber-300' : 'bg-emerald-500/15 text-emerald-300')}>{daily.warnings.length > 0 ? `${daily.warnings.length} warning${daily.warnings.length === 1 ? '' : 's'}` : 'Valid'}</span></td>
                         <td className="px-2 py-2">
@@ -764,55 +843,92 @@ export default function DualDailyLogsVoyagesPage() {
             </section>
 
             <section className="section-card rounded-2xl border border-border/80 bg-card/60 p-5 shadow-lg">
-              <div className="mb-4">
-                <h2 className="font-semibold">Voyage review</h2>
-                <p className="mt-1 text-xs text-muted-foreground">Excel-derived fuel is shown automatically. Type directly into either fuel field to override it; use the reset icon to restore the calculation.</p>
+              <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <h2 className="font-semibold">Voyage review & confirmation</h2>
+                  <p className="mt-1 max-w-4xl text-xs text-muted-foreground">
+                    Main-engine activity can suggest a window, but it never starts, ends, or splits a voyage without your confirmation.
+                    If one ME is stopped, the other ME keeps the voyage running. Gaps inside a confirmed window are shown as interruptions.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" variant="outline" onClick={suggestVoyages} className="gap-2"><Gauge className="h-4 w-4" />Suggest from ME activity</Button>
+                  <Button type="button" onClick={addManualVoyage} className="gap-2"><Plus className="h-4 w-4" />Add voyage</Button>
+                </div>
               </div>
-              <div className="overflow-x-auto rounded-xl border border-border/60">
-                <table className="min-w-[1580px] w-full text-xs">
-                  <thead className="bg-muted/40 text-muted-foreground">
-                    <tr>
-                      {['Voyage', 'Cycle', 'From', 'To', 'Departure', 'Arrival', 'Hours', 'ME fuel (editable)', 'All AE fuel (editable)', 'Total', 'Distance', 'Speed', 'Fuel/nm', 'Status'].map((heading) => (
-                        <th key={heading} className="px-2 py-3 text-left font-semibold">{heading}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredVoyages.map((voyage) => {
-                      const mainOverridden = voyage.mainEngineFuelOverride != null;
-                      const auxiliaryOverridden = voyage.auxiliaryEngineFuelOverride != null;
-                      return (
-                        <tr key={voyage.id} className="border-t border-border/40 align-top hover:bg-muted/20">
-                          <td className="px-2 py-2.5 font-semibold text-primary">{voyage.id}</td>
-                          <td className="px-2 py-2.5">{voyage.cycle}</td>
-                          <td className="px-1 py-1.5"><Input value={voyage.from} onChange={(event) => updateDefinition(voyage.id, 'from', event.target.value)} className="h-8 min-w-24 text-xs" /></td>
-                          <td className="px-1 py-1.5"><Input value={voyage.to} onChange={(event) => updateDefinition(voyage.id, 'to', event.target.value)} className="h-8 min-w-24 text-xs" /></td>
-                          <td className="px-1 py-1.5"><Input type="datetime-local" step="1" value={inputDateTime(voyage.departure)} onChange={(event) => { const value = isoDateTime(event.target.value); if (value) updateDefinition(voyage.id, 'departure', value); }} className="h-8 min-w-48 text-xs" /></td>
-                          <td className="px-1 py-1.5"><Input type="datetime-local" step="1" value={inputDateTime(voyage.arrival)} onChange={(event) => { const value = isoDateTime(event.target.value); if (value) updateDefinition(voyage.id, 'arrival', value); }} className="h-8 min-w-48 text-xs" /></td>
-                          <td className="px-2 py-2.5 text-right">{numberFormat.format(voyage.transitHours)}</td>
-                          <td className="px-1 py-1.5">
-                            <div className="flex min-w-36 items-center gap-1">
-                              <Input type="number" min="0" step="0.01" value={voyage.mainEngineFuel} onChange={(event) => updateDefinition(voyage.id, 'mainEngineFuelOverride', parseNonNegative(event.target.value))} className={cn('h-8 text-right text-xs', mainOverridden && 'border-sky-500/60 bg-sky-500/5')} />
-                              {mainOverridden && <button type="button" aria-label={`Restore calculated ME fuel for ${voyage.id}`} onClick={() => updateDefinition(voyage.id, 'mainEngineFuelOverride', null)} className="rounded p-1 text-sky-300 hover:bg-sky-500/10"><RotateCcw className="h-3.5 w-3.5" /></button>}
-                            </div>
-                          </td>
-                          <td className="px-1 py-1.5">
-                            <div className="flex min-w-36 items-center gap-1">
-                              <Input type="number" min="0" step="0.01" value={voyage.auxiliaryEngineFuel} onChange={(event) => updateDefinition(voyage.id, 'auxiliaryEngineFuelOverride', parseNonNegative(event.target.value))} className={cn('h-8 text-right text-xs', auxiliaryOverridden && 'border-sky-500/60 bg-sky-500/5')} />
-                              {auxiliaryOverridden && <button type="button" aria-label={`Restore calculated all AE fuel for ${voyage.id}`} onClick={() => updateDefinition(voyage.id, 'auxiliaryEngineFuelOverride', null)} className="rounded p-1 text-sky-300 hover:bg-sky-500/10"><RotateCcw className="h-3.5 w-3.5" /></button>}
-                            </div>
-                          </td>
-                          <td className="px-2 py-2.5 text-right font-semibold">{numberFormat.format(voyage.totalFuel)}</td>
-                          <td className="px-1 py-1.5"><Input type="number" min="0" step="0.01" value={voyage.distance} onChange={(event) => updateDefinition(voyage.id, 'distance', parseNonNegative(event.target.value))} className="h-8 w-24 text-right text-xs" /></td>
-                          <td className="px-1 py-1.5"><Input type="number" min="0" step="0.01" value={voyage.averageSpeed} onChange={(event) => updateDefinition(voyage.id, 'averageSpeed', parseNonNegative(event.target.value))} className="h-8 w-20 text-right text-xs" /></td>
-                          <td className="px-2 py-2.5 text-right">{numberFormat.format(voyage.fuelPerNauticalMile)}</td>
-                          <td className="px-2 py-2.5"><span className={cn('rounded-full px-2 py-1 text-[10px] font-semibold', mainOverridden || auxiliaryOverridden ? 'bg-sky-500/15 text-sky-300' : voyage.warnings.length > 0 ? 'bg-amber-500/15 text-amber-300' : 'bg-emerald-500/15 text-emerald-300')}>{mainOverridden || auxiliaryOverridden ? 'Manual override' : voyage.warnings.length > 0 ? `${voyage.warnings.length} issue${voyage.warnings.length === 1 ? '' : 's'}` : 'Ready'}</span></td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+              {definitions.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
+                  No voyage yet. Add one manually or create reviewable suggestions from the uploaded ME intervals.
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-xl border border-border/60">
+                  <table className="min-w-[2260px] w-full text-xs">
+                    <thead className="bg-muted/40 text-muted-foreground">
+                      <tr>
+                        {['Voyage', 'Confirmed', 'Cycle', 'From', 'To', 'Departure', 'Arrival', 'Window h', 'ME running h', 'Gap h', 'ME fuel (editable)', 'Other Fuel (editable)', 'Total', 'Distance', 'Speed', 'Fuel/nm', 'Voyage status', 'Interruption / change reason', 'Actions'].map((heading) => (
+                          <th key={heading} className="px-2 py-3 text-left font-semibold">{heading}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredVoyages.map((voyage, voyageIndex) => {
+                        const mainOverridden = voyage.mainEngineFuelOverride != null;
+                        const otherOverridden = voyage.otherFuelOverride != null || voyage.auxiliaryEngineFuelOverride != null;
+                        return (
+                          <tr key={voyage.id} className="border-t border-border/40 align-top hover:bg-muted/20">
+                            <td className="px-2 py-2.5">
+                              <p className="font-semibold text-primary">{voyage.id}</p>
+                              <p className="mt-1 text-[10px] uppercase text-muted-foreground">{voyage.source ?? 'saved'}</p>
+                            </td>
+                            <td className="px-2 py-2.5">
+                              <label className="inline-flex items-center gap-2 whitespace-nowrap">
+                                <input type="checkbox" checked={voyage.confirmed !== false} onChange={(event) => updateDefinition(voyage.id, 'confirmed', event.target.checked)} className="h-4 w-4 accent-primary" />
+                                {voyage.confirmed !== false ? 'Yes' : 'Review'}
+                              </label>
+                            </td>
+                            <td className="px-2 py-2.5">{voyage.cycle}</td>
+                            <td className="px-1 py-1.5"><Input value={voyage.from} onChange={(event) => updateDefinition(voyage.id, 'from', event.target.value)} className="h-8 min-w-24 text-xs" /></td>
+                            <td className="px-1 py-1.5"><Input value={voyage.to} onChange={(event) => updateDefinition(voyage.id, 'to', event.target.value)} className="h-8 min-w-24 text-xs" /></td>
+                            <td className="px-1 py-1.5"><Input type="datetime-local" step="1" value={inputDateTime(voyage.departure)} onChange={(event) => { const value = isoDateTime(event.target.value); if (value) updateDefinition(voyage.id, 'departure', value); }} className="h-8 min-w-48 text-xs" /></td>
+                            <td className="px-1 py-1.5"><Input type="datetime-local" step="1" value={inputDateTime(voyage.arrival)} onChange={(event) => { const value = isoDateTime(event.target.value); if (value) updateDefinition(voyage.id, 'arrival', value); }} className="h-8 min-w-48 text-xs" /></td>
+                            <td className="px-2 py-2.5 text-right">{numberFormat.format(voyage.transitHours)}</td>
+                            <td className="px-2 py-2.5 text-right text-emerald-300">{numberFormat.format(voyage.mainEngineRunningHours)}</td>
+                            <td className={cn('px-2 py-2.5 text-right', voyage.interruptionHours > 0 && 'text-amber-300')}>{numberFormat.format(voyage.interruptionHours)}</td>
+                            <td className="px-1 py-1.5">
+                              <div className="flex min-w-36 items-center gap-1">
+                                <Input type="number" min="0" step="0.01" value={voyage.mainEngineFuel} onChange={(event) => updateDefinition(voyage.id, 'mainEngineFuelOverride', parseNonNegative(event.target.value))} className={cn('h-8 text-right text-xs', mainOverridden && 'border-sky-500/60 bg-sky-500/5')} />
+                                {mainOverridden && <button type="button" aria-label={`Restore calculated ME fuel for ${voyage.id}`} onClick={() => updateDefinition(voyage.id, 'mainEngineFuelOverride', null)} className="rounded p-1 text-sky-300 hover:bg-sky-500/10"><RotateCcw className="h-3.5 w-3.5" /></button>}
+                              </div>
+                            </td>
+                            <td className="px-1 py-1.5">
+                              <div className="flex min-w-36 items-center gap-1">
+                                <Input type="number" min="0" step="0.01" value={voyage.otherFuel} onChange={(event) => updateDefinition(voyage.id, 'otherFuelOverride', parseNonNegative(event.target.value))} className={cn('h-8 text-right text-xs', otherOverridden && 'border-sky-500/60 bg-sky-500/5')} />
+                                {otherOverridden && <button type="button" aria-label={`Restore calculated Other Fuel for ${voyage.id}`} onClick={() => { updateDefinition(voyage.id, 'otherFuelOverride', null); updateDefinition(voyage.id, 'auxiliaryEngineFuelOverride', null); }} className="rounded p-1 text-sky-300 hover:bg-sky-500/10"><RotateCcw className="h-3.5 w-3.5" /></button>}
+                              </div>
+                            </td>
+                            <td className="px-2 py-2.5 text-right font-semibold">{numberFormat.format(voyage.totalFuel)}</td>
+                            <td className="px-1 py-1.5"><Input type="number" min="0" step="0.01" value={voyage.distance} onChange={(event) => updateDefinition(voyage.id, 'distance', parseNonNegative(event.target.value))} className="h-8 w-24 text-right text-xs" /></td>
+                            <td className="px-1 py-1.5"><Input type="number" min="0" step="0.01" value={voyage.averageSpeed} onChange={(event) => updateDefinition(voyage.id, 'averageSpeed', parseNonNegative(event.target.value))} className="h-8 w-20 text-right text-xs" /></td>
+                            <td className="px-2 py-2.5 text-right">{numberFormat.format(voyage.fuelPerNauticalMile)}</td>
+                            <td className="px-1 py-1.5">
+                              <select value={voyage.status ?? 'planned'} onChange={(event) => updateDefinition(voyage.id, 'status', event.target.value as NonNullable<VoyageDefinition['status']>)} className="h-8 min-w-28 rounded-md border border-input bg-background px-2 text-xs">
+                                <option value="planned">Planned</option><option value="underway">Underway</option><option value="paused">Paused</option><option value="completed">Completed</option><option value="aborted">Aborted</option>
+                              </select>
+                            </td>
+                            <td className="px-1 py-1.5"><Input value={voyage.interruptionReason ?? ''} onChange={(event) => updateDefinition(voyage.id, 'interruptionReason', event.target.value)} placeholder={voyage.interruptionHours > 0 ? 'Explain interruption / gap' : 'Optional note'} className="h-8 min-w-56 text-xs" /></td>
+                            <td className="px-2 py-2">
+                              <div className="flex gap-1">
+                                <Button type="button" variant="outline" size="sm" disabled={voyageIndex === 0} onClick={() => mergeWithPreviousVoyage(voyage.id)} className="h-8 px-2 text-[10px]">Merge previous</Button>
+                                <button type="button" aria-label={`Delete ${voyage.id}`} onClick={() => setDefinitions((current) => current.filter((definition) => definition.id !== voyage.id))} className="rounded p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"><Trash2 className="h-4 w-4" /></button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </section>
           </>
         )}

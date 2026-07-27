@@ -15,6 +15,26 @@ function overlapHours(start: string, end: string, windowStart: number, windowEnd
   return Math.max(0, Math.min(intervalEnd, windowEnd) - Math.max(intervalStart, windowStart)) / HOUR_MS;
 }
 
+function mergedOverlapHours(intervals: Array<{ start: number; end: number }>) {
+  const sorted = intervals
+    .filter((interval) => interval.end > interval.start)
+    .sort((a, b) => a.start - b.start);
+  let total = 0;
+  let currentStart = 0;
+  let currentEnd = 0;
+  for (const interval of sorted) {
+    if (currentEnd === 0 || interval.start > currentEnd) {
+      if (currentEnd > currentStart) total += currentEnd - currentStart;
+      currentStart = interval.start;
+      currentEnd = interval.end;
+    } else {
+      currentEnd = Math.max(currentEnd, interval.end);
+    }
+  }
+  if (currentEnd > currentStart) total += currentEnd - currentStart;
+  return total / HOUR_MS;
+}
+
 function coveredDates(startMs: number, endMs: number) {
   const result: string[] = [];
   const cursor = new Date(startMs);
@@ -41,7 +61,10 @@ export function calculateVoyages(
       return {
         ...definition,
         transitHours: 0,
+        mainEngineRunningHours: 0,
+        interruptionHours: 0,
         mainEngineFuel: 0,
+        otherFuel: 0,
         auxiliaryEngineFuel: 0,
         totalFuel: 0,
         averageBurn: 0,
@@ -57,6 +80,7 @@ export function calculateVoyages(
     }
 
     let calculatedMainEngineFuel = 0;
+    const runningIntervals: Array<{ start: number; end: number }> = [];
     for (const date of dates) {
       const daily = byDate.get(date);
       if (!daily) continue;
@@ -65,42 +89,57 @@ export function calculateVoyages(
         if (component.workingHours <= 0 || component.fuel <= 0) continue;
         const hourlyRate = component.fuel / component.workingHours;
         for (const interval of component.intervals) {
-          calculatedMainEngineFuel += hourlyRate * overlapHours(interval.start, interval.end, departure, arrival);
+          const overlap = overlapHours(interval.start, interval.end, departure, arrival);
+          calculatedMainEngineFuel += hourlyRate * overlap;
+          if (overlap > 0) {
+            runningIntervals.push({
+              start: Math.max(Date.parse(interval.start), departure),
+              end: Math.min(Date.parse(interval.end), arrival),
+            });
+          }
         }
       }
     }
 
-    // Established rule: combine every AE #... component for each covered date.
-    // A one-day voyage receives that full daily AE total; a multi-day voyage
-    // receives the average of the covered dates, with missing reports treated as zero.
-    const dailyAeTotals = dates.map((date) => byDate.get(date)?.auxiliaryEngineFuel ?? 0);
-    const calculatedAuxiliaryEngineFuel = dailyAeTotals.length === 0
+    // Other Fuel combines every AE plus all other machines. One-day voyages
+    // use the full daily total; multi-day voyages use the available-day average.
+    const dailyOtherTotals = dates
+      .map((date) => byDate.get(date)?.ancillaryFuel)
+      .filter((value): value is number => typeof value === 'number');
+    const calculatedOtherFuel = dailyOtherTotals.length === 0
       ? 0
-      : dailyAeTotals.reduce((sum, value) => sum + value, 0) / dailyAeTotals.length;
+      : dailyOtherTotals.reduce((sum, value) => sum + value, 0) / dailyOtherTotals.length;
     const hasMainOverride = typeof definition.mainEngineFuelOverride === 'number'
       && Number.isFinite(definition.mainEngineFuelOverride)
       && definition.mainEngineFuelOverride >= 0;
-    const hasAuxiliaryOverride = typeof definition.auxiliaryEngineFuelOverride === 'number'
-      && Number.isFinite(definition.auxiliaryEngineFuelOverride)
-      && definition.auxiliaryEngineFuelOverride >= 0;
+    const legacyOtherOverride = definition.otherFuelOverride ?? definition.auxiliaryEngineFuelOverride;
+    const hasOtherOverride = typeof legacyOtherOverride === 'number'
+      && Number.isFinite(legacyOtherOverride)
+      && legacyOtherOverride >= 0;
     const mainEngineFuel = hasMainOverride
       ? definition.mainEngineFuelOverride as number
       : calculatedMainEngineFuel;
-    const auxiliaryEngineFuel = hasAuxiliaryOverride
-      ? definition.auxiliaryEngineFuelOverride as number
-      : calculatedAuxiliaryEngineFuel;
+    const otherFuel = hasOtherOverride ? legacyOtherOverride as number : calculatedOtherFuel;
     const transitHours = (arrival - departure) / HOUR_MS;
-    const totalFuel = mainEngineFuel + auxiliaryEngineFuel;
+    const mainEngineRunningHours = Math.min(transitHours, mergedOverlapHours(runningIntervals));
+    const interruptionHours = Math.max(0, transitHours - mainEngineRunningHours);
+    const totalFuel = mainEngineFuel + otherFuel;
 
     if (mainEngineFuel === 0) warnings.push('No main-engine activity overlaps this voyage window.');
-    if (auxiliaryEngineFuel === 0) warnings.push('No auxiliary-engine fuel was found for this voyage.');
+    if (otherFuel === 0) warnings.push('No Other Fuel (AEs / other machines) was found for this voyage.');
+    if (interruptionHours > 0) warnings.push(`${rounded(interruptionHours, 2)} h inside the voyage window has no main-engine activity; the voyage was not split automatically.`);
+    if (definition.status === 'paused' && !definition.interruptionReason?.trim()) warnings.push('Paused voyage requires an interruption reason.');
+    if (definition.source === 'suggested' && definition.confirmed !== true) warnings.push('Suggested voyage window must be confirmed before download.');
     if (definition.distance <= 0) warnings.push('Distance is missing or zero.');
 
     return {
       ...definition,
       transitHours: rounded(transitHours),
+      mainEngineRunningHours: rounded(mainEngineRunningHours),
+      interruptionHours: rounded(interruptionHours),
       mainEngineFuel: rounded(mainEngineFuel),
-      auxiliaryEngineFuel: rounded(auxiliaryEngineFuel),
+      otherFuel: rounded(otherFuel),
+      auxiliaryEngineFuel: rounded(otherFuel),
       totalFuel: rounded(totalFuel),
       averageBurn: transitHours > 0 ? rounded(totalFuel / transitHours) : 0,
       fuelPerNauticalMile: definition.distance > 0 ? rounded(totalFuel / definition.distance) : 0,

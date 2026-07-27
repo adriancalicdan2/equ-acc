@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { authorizeRequest } from '@/lib/server/auth';
 import { enforceRateLimit } from '@/lib/server/rateLimit';
 import { calculateVoyages } from '@/lib/voyage/calculations';
+import { suggestVoyageDefinitions } from '@/lib/voyage/detection';
 import { loadVoyageTemplateData } from '@/lib/voyage/template';
 import { parseVoyageUploadRequest } from '@/lib/voyage/upload';
 import { detectedVesselNames } from '@/lib/voyage/vessel';
@@ -44,11 +45,10 @@ export async function POST(request: NextRequest) {
       if (metadata) {
         daily.location = metadata.location;
         daily.activity = metadata.activity;
-      } else {
-        daily.warnings.push('Location and activity are not present in the template for this date.');
       }
     }
-    const voyages = calculateVoyages(dailyLogs, definitions);
+    const selectedDefinitions = definitions.length > 0 ? definitions : suggestVoyageDefinitions(dailyLogs);
+    const voyages = calculateVoyages(dailyLogs, selectedDefinitions);
     const warnings = [
       ...dailyLogs.flatMap((daily) => daily.warnings.map((warning) => `${daily.date}: ${warning}`)),
       ...voyages.flatMap((voyage) => voyage.warnings.map((warning) => `${voyage.id}: ${warning}`)),

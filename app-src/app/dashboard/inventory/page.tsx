@@ -167,10 +167,9 @@ export default function InventoryControlPage() {
     if (!user) return;
     const q = query(collection(firestore, 'reports'), orderBy('createdAt', 'desc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      setVesselReports(snapshot.docs.map(d => ({
-        id: d.id,
-        ...d.data()
-      })));
+      setVesselReports(snapshot.docs
+        .filter((snapshotDoc) => snapshotDoc.data().archived !== true)
+        .map((snapshotDoc) => ({ id: snapshotDoc.id, ...snapshotDoc.data() })));
     });
     return () => unsubscribe();
   }, [user]);
@@ -182,35 +181,6 @@ export default function InventoryControlPage() {
     const unsubscribe = onSnapshot(q, async (snapshot) => {
       const docs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
       
-      // Delete old fls-floater if it exists and migrate to fls-floater-m and fls-floater-std
-      const hasOldFloater = docs.some(d => d.id === 'fls-floater');
-      if (hasOldFloater) {
-        try {
-          const { deleteDoc, doc, setDoc } = await import('firebase/firestore');
-          await deleteDoc(doc(firestore, 'inventory', 'fls-floater'));
-          await setDoc(doc(firestore, 'inventory', 'fls-floater-m'), {
-            name: 'FLS Floater SP2.0AR(M)',
-            deviceCode: 'SP2.0AR(M)',
-            category: 'device',
-            arrivalsLog: [],
-            defectiveLog: [],
-            createdAt: new Date()
-          });
-          await setDoc(doc(firestore, 'inventory', 'fls-floater-std'), {
-            name: 'FLS Floater SP2.0AR',
-            deviceCode: 'SP2.0AR',
-            category: 'device',
-            arrivalsLog: [],
-            defectiveLog: [],
-            createdAt: new Date()
-          });
-          console.log('Migrated FLS Floater items successfully');
-        } catch (err) {
-          console.error('Failed to migrate FLS Floater items:', err);
-        }
-        return;
-      }
-
       // Seed missing floaters if not present
       const hasFloaterM = docs.some(d => d.id === 'fls-floater-m');
       const hasFloaterStd = docs.some(d => d.id === 'fls-floater-std');
@@ -274,38 +244,8 @@ export default function InventoryControlPage() {
     return () => unsubscribe();
   }, [user]);
 
-  // Automatically sync baseline arrivals for pre-existing deployed items to make available stock = 0
-  useEffect(() => {
-    if (vesselReports.length === 0 || inventory.length === 0) return;
-    
-    const syncBaselines = async () => {
-      for (const item of inventory) {
-        const totalDeployed = getDeployedCount(item.id);
-        const totalDefective = (item.defectiveLog || []).reduce((sum: number, entry: any) => sum + (entry.qty || 0), 0);
-        const totalArrivals = (item.arrivalsLog || []).reduce((sum: number, entry: any) => sum + (entry.qty || 0), 0);
-        const targetArrivals = totalDeployed + totalDefective;
-        
-        if (totalArrivals !== targetArrivals) {
-          try {
-            await setDoc(doc(firestore, 'inventory', item.id), {
-              arrivalsLog: [{
-                qty: targetArrivals,
-                type: 'New Arrival' as const,
-                source: 'Baseline Deployed Stock',
-                date: format(new Date(), 'yyyy-MM-dd'),
-                loggedBy: 'System Sync'
-              }]
-            }, { merge: true });
-            console.log(`Auto-adjusted stock to make available 0 for ${item.name}: set arrivals to ${targetArrivals}`);
-          } catch (err) {
-            console.error(`Failed to auto-adjust baseline stock for ${item.id}:`, err);
-          }
-        }
-      }
-    };
-    
-    syncBaselines();
-  }, [vesselReports, inventory]);
+  // Stock arrivals are an append-only ledger. Equipment reports change the deployed count;
+  // this page must never rewrite arrival history to force an artificial balance.
 
   // Deployed hardware counts calculated dynamically from vessel reports
   const getDeployedCount = (itemId: string): number => {
@@ -577,7 +517,8 @@ export default function InventoryControlPage() {
             const totalStockIn = (item.arrivalsLog || []).reduce((acc: number, log: any) => acc + log.qty, 0);
             const totalDeployed = getDeployedCount(item.id);
             const totalDefective = (item.defectiveLog || []).reduce((acc: number, log: any) => acc + log.qty, 0);
-            const availableStock = totalStockIn - totalDeployed - totalDefective;
+            const totalLost = (item.lostLog || []).reduce((acc: number, log: any) => acc + log.qty, 0);
+            const availableStock = totalStockIn - totalDeployed - totalDefective - totalLost;
             const isLowStock = availableStock <= 5;
 
             return (
@@ -623,8 +564,8 @@ export default function InventoryControlPage() {
                       <p className="font-bold text-foreground mt-0.5">{totalDeployed}</p>
                     </div>
                     <div>
-                      <p className="text-muted-foreground text-[10px] uppercase font-semibold">Defective</p>
-                      <p className="font-bold text-foreground mt-0.5">{totalDefective}</p>
+                      <p className="text-muted-foreground text-[10px] uppercase font-semibold">Defective / Lost</p>
+                      <p className="font-bold text-foreground mt-0.5">{totalDefective + totalLost}</p>
                     </div>
                   </div>
                 </div>
@@ -696,7 +637,7 @@ export default function InventoryControlPage() {
                     <th className="px-4 py-2 text-center">Category</th>
                     <th className="px-4 py-2 text-center w-24">Total In (Arrivals)</th>
                     <th className="px-4 py-2 text-center w-24">Deployed</th>
-                    <th className="px-4 py-2 text-center w-24">Defective</th>
+                    <th className="px-4 py-2 text-center w-24">Defective / Lost</th>
                     <th className="px-4 py-2 text-center w-24">Net Available Stock</th>
                   </tr>
                 </thead>
@@ -705,7 +646,8 @@ export default function InventoryControlPage() {
                     const totalStockIn = (item.arrivalsLog || []).reduce((acc: number, log: any) => acc + log.qty, 0);
                     const totalDeployed = getDeployedCount(item.id);
                     const totalDefective = (item.defectiveLog || []).reduce((acc: number, log: any) => acc + log.qty, 0);
-                    const availableStock = totalStockIn - totalDeployed - totalDefective;
+                    const totalLost = (item.lostLog || []).reduce((acc: number, log: any) => acc + log.qty, 0);
+                    const availableStock = totalStockIn - totalDeployed - totalDefective - totalLost;
 
                     return (
                       <tr key={item.id} className="hover:bg-neutral-50/50">
@@ -714,7 +656,7 @@ export default function InventoryControlPage() {
                         <td className="px-4 py-2 text-center text-neutral-600 capitalize">{item.category}</td>
                         <td className="px-4 py-2 text-center">{totalStockIn}</td>
                         <td className="px-4 py-2 text-center text-blue-600 font-bold">{totalDeployed}</td>
-                        <td className="px-4 py-2 text-center text-red-600 font-bold">{totalDefective}</td>
+                        <td className="px-4 py-2 text-center text-red-600 font-bold">{totalDefective + totalLost}</td>
                         <td className="px-4 py-2 text-center font-bold text-emerald-600">{availableStock}</td>
                       </tr>
                     );
