@@ -3,6 +3,8 @@ import { authorizeRequest, VIEW_IDS } from '@/lib/server/auth';
 import { enforceRateLimit } from '@/lib/server/rateLimit';
 import { parseJsonRequest } from '@/lib/server/request';
 import { adminUserRequestSchema } from '@/lib/validations/apiSchemas';
+import { firebaseConfig } from '@/lib/firebase/config';
+import { updateAllowedViewsWithIdToken } from '@/lib/firebase/adminUserRest';
 
 export async function POST(request: NextRequest) {
   const authorization = await authorizeRequest(request, { adminOnly: true });
@@ -15,6 +17,29 @@ export async function POST(request: NextRequest) {
 
   try {
     const data = parsed.data;
+    const isPermissionOnlyUpdate = data.action === 'update'
+      && data.allowedViews !== undefined
+      && data.email === undefined
+      && data.displayName === undefined
+      && data.password === undefined
+      && data.role === undefined
+      && data.shiftHours === undefined
+      && data.restDays === undefined;
+
+    if (isPermissionOnlyUpdate && data.action === 'update' && data.allowedViews !== undefined) {
+      const encodedToken = request.headers.get('authorization')?.slice(7);
+      if (!encodedToken) {
+        return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+      }
+      await updateAllowedViewsWithIdToken({
+        projectId: firebaseConfig.projectId,
+        uid: data.uid,
+        allowedViews: data.allowedViews,
+        idToken: encodedToken,
+      });
+      return NextResponse.json({ success: true });
+    }
+
     const [{ getAdminAuth, getAdminFirestore }, { FieldValue }] = await Promise.all([
       import('@/lib/firebase/admin'),
       import('firebase-admin/firestore'),
