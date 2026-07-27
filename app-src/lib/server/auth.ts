@@ -1,8 +1,7 @@
 import 'server-only';
 
-import type { DecodedIdToken } from 'firebase-admin/auth';
 import { NextRequest, NextResponse } from 'next/server';
-import { getAdminAuth, getAdminFirestore } from '@/lib/firebase/admin';
+import { firebaseConfig } from '@/lib/firebase/config';
 
 export const VIEW_IDS = [
   'equipment-accountability',
@@ -21,6 +20,23 @@ interface UserProfile {
   allowedViews: string[];
 }
 
+interface VerifiedIdToken {
+  uid: string;
+  aud: string;
+  email?: string;
+}
+
+interface IdentityToolkitResponse {
+  users?: Array<{
+    localId?: string;
+    email?: string;
+    disabled?: boolean;
+  }>;
+  error?: {
+    message?: string;
+  };
+}
+
 interface FirestoreRestValue {
   stringValue?: string;
   arrayValue?: { values?: FirestoreRestValue[] };
@@ -32,7 +48,7 @@ interface FirestoreRestDocument {
 
 export interface AuthorizedRequest {
   authorized: true;
-  token: DecodedIdToken;
+  token: VerifiedIdToken;
   profile: UserProfile;
 }
 
@@ -42,26 +58,20 @@ export interface RejectedRequest {
 }
 
 const REJECTED_TOKEN_CODES = new Set([
-  'auth/argument-error',
-  'auth/id-token-expired',
-  'auth/id-token-revoked',
-  'auth/invalid-id-token',
-  'auth/user-disabled',
+  'CREDENTIAL_TOO_OLD_LOGIN_AGAIN',
+  'INVALID_ID_TOKEN',
+  'TOKEN_EXPIRED',
+  'USER_DISABLED',
+  'USER_NOT_FOUND',
 ]);
 
-function errorCode(error: unknown) {
-  if (!error || typeof error !== 'object' || !('code' in error)) return '';
-  const code = (error as { code?: unknown }).code;
-  return typeof code === 'string' ? code : String(code ?? '');
-}
-
-function profileFromData(data: Record<string, unknown>): UserProfile {
-  return {
-    role: typeof data.role === 'string' ? data.role : 'user',
-    allowedViews: Array.isArray(data.allowedViews)
-      ? data.allowedViews.filter((view): view is string => typeof view === 'string')
-      : [],
-  };
+class TokenVerificationError extends Error {
+  constructor(
+    message: string,
+    readonly invalidToken: boolean,
+  ) {
+    super(message);
+  }
 }
 
 function profileFromRestDocument(document: FirestoreRestDocument): UserProfile {
@@ -75,8 +85,46 @@ function profileFromRestDocument(document: FirestoreRestDocument): UserProfile {
   };
 }
 
-async function loadProfileWithUserToken(
-  token: DecodedIdToken,
+async function verifyIdToken(encodedToken: string): Promise<VerifiedIdToken> {
+  const response = await fetch(
+    `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(firebaseConfig.apiKey)}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ idToken: encodedToken }),
+      cache: 'no-store',
+    },
+  );
+
+  let payload: IdentityToolkitResponse;
+  try {
+    payload = await response.json() as IdentityToolkitResponse;
+  } catch {
+    throw new TokenVerificationError('Firebase returned an invalid authentication response.', false);
+  }
+
+  if (!response.ok) {
+    const code = payload.error?.message?.split(' : ')[0] ?? '';
+    throw new TokenVerificationError(
+      payload.error?.message ?? 'Firebase rejected the authentication token.',
+      REJECTED_TOKEN_CODES.has(code),
+    );
+  }
+
+  const user = payload.users?.[0];
+  if (!user?.localId || user.disabled) {
+    throw new TokenVerificationError('Firebase user is unavailable.', true);
+  }
+
+  return {
+    uid: user.localId,
+    aud: firebaseConfig.projectId,
+    email: user.email,
+  };
+}
+
+async function loadUserProfile(
+  token: VerifiedIdToken,
   encodedToken: string,
 ): Promise<UserProfile | null> {
   const projectId = encodeURIComponent(token.aud);
@@ -97,21 +145,6 @@ async function loadProfileWithUserToken(
   return profileFromRestDocument(await response.json() as FirestoreRestDocument);
 }
 
-async function loadUserProfile(
-  token: DecodedIdToken,
-  encodedToken: string,
-): Promise<UserProfile | null> {
-  try {
-    const snapshot = await getAdminFirestore().collection('users').doc(token.uid).get();
-    return snapshot.exists ? profileFromData(snapshot.data() ?? {}) : null;
-  } catch (error) {
-    console.warn(
-      `[authorizeRequest] Admin Firestore profile lookup failed (${errorCode(error) || 'unknown'}); retrying with the verified user's credentials.`,
-    );
-    return loadProfileWithUserToken(token, encodedToken);
-  }
-}
-
 export async function authorizeRequest(
   request: NextRequest,
   options: { view?: ViewId; adminOnly?: boolean } = {},
@@ -125,13 +158,12 @@ export async function authorizeRequest(
   }
 
   const encodedToken = authorization.slice(7);
-  let token: DecodedIdToken;
+  let token: VerifiedIdToken;
   try {
-    token = await getAdminAuth().verifyIdToken(encodedToken);
+    token = await verifyIdToken(encodedToken);
   } catch (error) {
-    const code = errorCode(error);
     console.error('[authorizeRequest] Token verification failed:', error);
-    const invalidToken = REJECTED_TOKEN_CODES.has(code);
+    const invalidToken = error instanceof TokenVerificationError && error.invalidToken;
     return {
       authorized: false,
       response: NextResponse.json(
