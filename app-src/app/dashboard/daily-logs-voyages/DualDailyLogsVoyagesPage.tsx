@@ -91,6 +91,17 @@ function parseNonNegative(value: string) {
   return Number.isFinite(number) && number >= 0 ? number : 0;
 }
 
+async function readApiJson<T>(response: Response): Promise<T> {
+  const text = await response.text();
+  if (!text) return {} as T;
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new Error(response.ok
+      ? 'The server returned an invalid response.'
+      : text.trim() || `Server request failed (${response.status}).`);
+  }
+}
 export default function DualDailyLogsVoyagesPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [files, setFiles] = useState<File[]>([]);
@@ -109,7 +120,7 @@ export default function DualDailyLogsVoyagesPage() {
     const loadTemplateDefinitions = async () => {
       try {
         const response = await authenticatedFetch('/api/analyze-voyage-logs');
-        const payload = await response.json() as AnalysisResponse | { error?: string };
+        const payload = await readApiJson<AnalysisResponse | { error?: string }>(response);
         if (active && response.ok && 'voyages' in payload) {
           setDefinitions(payload.voyages.map(voyageDefinition));
         }
@@ -206,7 +217,7 @@ export default function DualDailyLogsVoyagesPage() {
         method: 'POST',
         body: formDataWithFiles(),
       });
-      const payload = await response.json() as AnalysisResponse | { error?: string };
+      const payload = await readApiJson<AnalysisResponse | { error?: string }>(response);
       if (!response.ok || !('dailyLogs' in payload)) {
         throw new Error('error' in payload ? payload.error : 'Analysis failed.');
       }
@@ -297,7 +308,7 @@ export default function DualDailyLogsVoyagesPage() {
       body.append('dateTo', dateTo);
       const response = await authenticatedFetch('/api/generate-voyage-report', { method: 'POST', body });
       if (!response.ok) {
-        const payload = await response.json() as { error?: string };
+        const payload = await readApiJson<{ error?: string }>(response);
         throw new Error(payload.error ?? 'Workbook generation failed.');
       }
       const blob = await response.blob();

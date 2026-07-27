@@ -1,6 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { FieldValue } from 'firebase-admin/firestore';
-import { getAdminAuth, getAdminFirestore } from '@/lib/firebase/admin';
 import { authorizeRequest, VIEW_IDS } from '@/lib/server/auth';
 import { enforceRateLimit } from '@/lib/server/rateLimit';
 import { parseJsonRequest } from '@/lib/server/request';
@@ -15,11 +13,14 @@ export async function POST(request: NextRequest) {
   const parsed = await parseJsonRequest(request, adminUserRequestSchema);
   if (!parsed.success) return parsed.response;
 
-  const data = parsed.data;
-  const auth = getAdminAuth();
-  const db = getAdminFirestore();
-
   try {
+    const data = parsed.data;
+    const [{ getAdminAuth, getAdminFirestore }, { FieldValue }] = await Promise.all([
+      import('@/lib/firebase/admin'),
+      import('firebase-admin/firestore'),
+    ]);
+    const auth = getAdminAuth();
+    const db = getAdminFirestore();
     if (data.action === 'create') {
       const createdUser = await auth.createUser({
         email: data.email,
