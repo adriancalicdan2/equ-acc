@@ -683,14 +683,19 @@ export default function DualDailyLogsVoyagesPage() {
         const payload = await readApiJson<{ error?: string }>(response);
         throw new Error(payload.error ?? 'Workbook generation failed.');
       }
+      const generatedVoyageCount = Number(response.headers.get('X-AIMF-Voyage-Count'));
+      const generatedDailyCount = Number(response.headers.get('X-AIMF-Daily-Count'));
+      if (!Number.isInteger(generatedVoyageCount) || generatedVoyageCount !== downloadableVoyages.length) {
+        throw new Error('The server did not verify the expected Voyage Summary rows. Please try the download again.');
+      }
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
       anchor.href = url;
-      anchor.download = `${vesselFileStem(vesselName)}-${dateFrom}-to-${dateTo}.xlsx`;
+      anchor.download = `${vesselFileStem(vesselName)}-${dateFrom}-to-${dateTo}-${generatedVoyageCount}-voyages.xlsx`;
       anchor.click();
-      URL.revokeObjectURL(url);
-      toast.success(`Downloaded the ${vesselName.trim()} report for ${dateFrom} through ${dateTo}.`);
+      window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
+      toast.success(`Downloaded ${generatedVoyageCount} populated Voyage Summary row${generatedVoyageCount === 1 ? '' : 's'} and ${generatedDailyCount} daily row${generatedDailyCount === 1 ? '' : 's'}.`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Unable to generate the workbook.');
     } finally {
