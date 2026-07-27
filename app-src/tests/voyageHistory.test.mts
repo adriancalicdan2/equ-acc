@@ -5,6 +5,7 @@ import {
   appendDailyLogHistory,
   duplicateDailyLogDates,
   normalizeVesselVoyageDefinitions,
+  replaceDailyLogHistory,
   vesselHistoryId,
 } from '../lib/voyage/history.ts';
 import { manualInputToDailyLog } from '../lib/voyage/manual.ts';
@@ -13,7 +14,7 @@ function daily(date: string) {
   return manualInputToDailyLog({
     id: date,
     date,
-    location: 'Perez',
+    location: 'Port Alpha',
     activity: 'Transit',
     portHours: 4,
     starboardHours: 4,
@@ -80,4 +81,24 @@ test('legacy template voyages are removed and vessel voyages restart at V1', () 
     { id: 'V2', cycle: 1, displayCycle: false },
   ]);
   assert.equal(result.definitions[0].departure, '2026-01-25T00:00:00.000Z');
+});
+
+test('replacement saves selected date deletions without restoring old rows', () => {
+  const result = replaceDailyLogHistory(
+    [daily('2026-01-25'), daily('2026-02-28'), daily('2026-03-01')],
+    [daily('2026-01-25'), daily('2026-03-01'), daily('2026-04-01')],
+    'Harbor Master 2',
+  );
+
+  assert.deepEqual(result.dailyLogs.map((entry) => entry.date), [
+    '2026-01-25',
+    '2026-03-01',
+    '2026-04-01',
+  ]);
+  assert.equal(result.added, 1);
+  assert.equal(result.deleted, 1);
+
+  const cleared = replaceDailyLogHistory(result.dailyLogs, [], 'Harbor Master 2');
+  assert.deepEqual(cleared.dailyLogs, []);
+  assert.equal(cleared.deleted, 3);
 });

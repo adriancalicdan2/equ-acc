@@ -1,6 +1,11 @@
 import { auth } from '@/lib/firebase/client';
 import type { DailyLogRecord, VoyageDefinition } from './types';
-import { appendDailyLogHistory, normalizeVesselVoyageDefinitions, vesselHistoryId } from './history';
+import {
+  appendDailyLogHistory,
+  normalizeVesselVoyageDefinitions,
+  replaceDailyLogHistory,
+  vesselHistoryId,
+} from './history';
 import { cleanVesselName } from './vessel';
 
 const DATABASE_NAME = 'aimf-vessel-reporting';
@@ -31,6 +36,7 @@ export interface SaveVesselHistoryResult {
   id: string;
   added: number;
   skipped: number;
+  deleted: number;
   total: number;
 }
 
@@ -107,6 +113,22 @@ async function writeHistory(history: StoredVesselHistory) {
   });
 }
 
+async function deleteHistory(uid: string, historyId: string) {
+  const database = await openHistoryDatabase();
+  return new Promise<void>((resolve, reject) => {
+    const transaction = database.transaction(HISTORY_STORE, 'readwrite');
+    transaction.objectStore(HISTORY_STORE).delete(storageKey(uid, historyId));
+    transaction.oncomplete = () => {
+      database.close();
+      resolve();
+    };
+    transaction.onerror = () => {
+      database.close();
+      reject(transaction.error ?? new Error('Unable to clear the vessel history.'));
+    };
+  });
+}
+
 export async function listSavedVesselHistories() {
   const histories = await readAllForUser(currentUserId());
   return histories
@@ -142,21 +164,30 @@ export async function loadSavedVesselHistory(historyId: string) {
   };
 }
 
+export async function clearSavedVesselHistory(historyId: string) {
+  const uid = currentUserId();
+  const history = await readHistory(uid, historyId);
+  if (!history) throw new Error('The selected saved vessel was not found in this browser.');
+  await deleteHistory(uid, historyId);
+}
+
 export async function saveVesselHistory(options: {
   vesselName: string;
   dailyLogs: DailyLogRecord[];
   definitions: VoyageDefinition[];
+  replaceExisting?: boolean;
 }): Promise<SaveVesselHistoryResult> {
   const uid = currentUserId();
   const selectedVessel = cleanVesselName(options.vesselName);
   const historyId = vesselHistoryId(selectedVessel);
   const existing = await readHistory(uid, historyId);
-  const appended = appendDailyLogHistory(
-    existing?.dailyLogs ?? [],
-    options.dailyLogs,
-    selectedVessel,
-  );
-  const dailyLogs = appended.dailyLogs;
+  const updated = options.replaceExisting
+    ? replaceDailyLogHistory(existing?.dailyLogs ?? [], options.dailyLogs, selectedVessel)
+    : {
+        ...appendDailyLogHistory(existing?.dailyLogs ?? [], options.dailyLogs, selectedVessel),
+        deleted: 0,
+      };
+  const dailyLogs = updated.dailyLogs;
   const dates = dailyLogs.map((daily) => daily.date);
 
   try {
@@ -181,8 +212,9 @@ export async function saveVesselHistory(options: {
 
   return {
     id: historyId,
-    added: appended.added,
-    skipped: appended.skipped,
+    added: updated.added,
+    skipped: updated.skipped,
+    deleted: updated.deleted,
     total: dailyLogs.length,
   };
 }

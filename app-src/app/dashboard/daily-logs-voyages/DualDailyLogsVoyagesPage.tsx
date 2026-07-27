@@ -25,6 +25,7 @@ import { Input } from '@/components/ui/input';
 import { authenticatedFetch } from '@/lib/firebase/authenticatedFetch';
 import { useAuth } from '@/lib/firebase/AuthContext';
 import {
+  clearSavedVesselHistory,
   listSavedVesselHistories,
   loadSavedVesselHistory,
   saveVesselHistory,
@@ -106,6 +107,24 @@ function fullDateRange(records: DailyLogRecord[]) {
   return dates.length > 0 ? { from: dates[0], to: dates.at(-1) ?? dates[0] } : null;
 }
 
+function voyageOverlapsDates(definition: VoyageDefinition, dates: Set<string>) {
+  const departure = Date.parse(definition.departure);
+  const arrival = Date.parse(definition.arrival);
+  if (!Number.isFinite(departure) || !Number.isFinite(arrival) || arrival <= departure) return false;
+  return [...dates].some((date) => {
+    const dayStart = Date.parse(`${date}T00:00:00.000Z`);
+    const dayEnd = dayStart + 86_400_000;
+    return departure < dayEnd && arrival > dayStart;
+  });
+}
+
+function selectedDateSummary(dates: Set<string>) {
+  const sorted = [...dates].sort();
+  if (sorted.length === 0) return '';
+  if (sorted.length <= 5) return sorted.join(', ');
+  return `${sorted[0]} through ${sorted.at(-1)} (${sorted.length} selected dates)`;
+}
+
 function parseNonNegative(value: string) {
   const number = Number(value);
   return Number.isFinite(number) && number >= 0 ? number : 0;
@@ -141,6 +160,8 @@ export default function DualDailyLogsVoyagesPage() {
   const [generating, setGenerating] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historySaving, setHistorySaving] = useState(false);
+  const [selectedDates, setSelectedDates] = useState<Set<string>>(new Set());
+  const [deletedSavedDateCount, setDeletedSavedDateCount] = useState(0);
 
   useEffect(() => {
     if (!user) return;
@@ -171,10 +192,6 @@ export default function DualDailyLogsVoyagesPage() {
     () => [...savedLogs, ...uploadedLogs, ...manualLogs].sort((a, b) => a.date.localeCompare(b.date)),
     [manualLogs, savedLogs, uploadedLogs],
   );
-  const manualDates = useMemo(
-    () => new Set(manualInputs.map((entry) => entry.date)),
-    [manualInputs],
-  );
   const pendingEntryCount = uploadedLogs.length + manualInputs.length;
   const loadedHistory = savedHistories.find((history) => history.id === loadedHistoryId);
   const rangeValid = Boolean(dateFrom && dateTo && validateDateRange(dateFrom, dateTo));
@@ -188,6 +205,14 @@ export default function DualDailyLogsVoyagesPage() {
       : dailyLogs,
     [dailyLogs, dateFrom, dateTo, rangeValid],
   );
+  const visibleDailyDates = useMemo(
+    () => filteredDailyLogs.map((daily) => daily.date),
+    [filteredDailyLogs],
+  );
+  const allVisibleDatesSelected = visibleDailyDates.length > 0
+    && visibleDailyDates.every((date) => selectedDates.has(date));
+  const someVisibleDatesSelected = visibleDailyDates.some((date) => selectedDates.has(date));
+  const hasUnsavedDataChanges = pendingEntryCount > 0 || deletedSavedDateCount > 0;
   const filteredVoyages = useMemo(
     () => rangeValid
       ? allVoyages.filter((voyage) => voyageInDateRange(voyage, dateFrom, dateTo))
@@ -231,7 +256,7 @@ export default function DualDailyLogsVoyagesPage() {
       toast.error('Choose a saved vessel first.');
       return;
     }
-    if (pendingEntryCount > 0 && !window.confirm('Loading another vessel will discard the current unsaved entries. Continue?')) return;
+    if (hasUnsavedDataChanges && !window.confirm('Loading another vessel will discard the current unsaved changes. Continue?')) return;
     setHistoryLoading(true);
     try {
       const history = await loadSavedVesselHistory(historySelection);
@@ -243,6 +268,8 @@ export default function DualDailyLogsVoyagesPage() {
       setManualInputs([]);
       setManualDraft(EMPTY_MANUAL_ENTRY);
       setFiles([]);
+      setSelectedDates(new Set());
+      setDeletedSavedDateCount(0);
       setDefinitions(history.definitions);
       const range = fullDateRange(history.dailyLogs);
       setDateFrom(range?.from ?? '');
@@ -259,7 +286,7 @@ export default function DualDailyLogsVoyagesPage() {
   };
 
   const startNewHistory = () => {
-    if (pendingEntryCount > 0 && !window.confirm('Starting a new vessel will discard the current unsaved entries. Continue?')) return;
+    if (hasUnsavedDataChanges && !window.confirm('Starting a new vessel will discard the current unsaved changes. Continue?')) return;
     setHistorySelection('');
     setLoadedHistoryId('');
     setSavedLogs([]);
@@ -267,6 +294,8 @@ export default function DualDailyLogsVoyagesPage() {
     setManualInputs([]);
     setManualDraft(EMPTY_MANUAL_ENTRY);
     setFiles([]);
+    setSelectedDates(new Set());
+    setDeletedSavedDateCount(0);
     setVesselName('');
     setDefinitions([]);
     setDateFrom('');
@@ -286,7 +315,7 @@ export default function DualDailyLogsVoyagesPage() {
       toast.error('The loaded vessel name was changed. Choose New vessel to save it separately.');
       return;
     }
-    if (dailyLogs.length === 0) {
+    if (dailyLogs.length === 0 && !loadedHistoryId) {
       toast.error('Analyze Excel files or add a manual entry before saving.');
       return;
     }
@@ -296,6 +325,7 @@ export default function DualDailyLogsVoyagesPage() {
         vesselName,
         dailyLogs,
         definitions,
+        replaceExisting: Boolean(loadedHistoryId),
       });
       const [history, histories] = await Promise.all([
         loadSavedVesselHistory(result.id),
@@ -309,17 +339,151 @@ export default function DualDailyLogsVoyagesPage() {
       setUploadedLogs([]);
       setManualInputs([]);
       setFiles([]);
+      setSelectedDates(new Set());
+      setDeletedSavedDateCount(0);
       const range = fullDateRange(history.dailyLogs);
       setDateFrom(range?.from ?? '');
       setDateTo(range?.to ?? '');
-      toast.success(result.added > 0
-        ? `Saved ${result.added} new entr${result.added === 1 ? 'y' : 'ies'}; ${result.total} total for ${history.vesselName}.`
-        : `No duplicate dates were added. ${result.total} saved entries remain.`);
+      if (result.deleted > 0) {
+        toast.success(`Saved changes: ${result.deleted} date${result.deleted === 1 ? '' : 's'} deleted, ${result.added} added, ${result.total} remaining.`);
+      } else {
+        toast.success(result.added > 0
+          ? `Saved ${result.added} new entr${result.added === 1 ? 'y' : 'ies'}; ${result.total} total for ${history.vesselName}.`
+          : `No duplicate dates were added. ${result.total} saved entries remain.`);
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Unable to save the vessel history.');
     } finally {
       setHistorySaving(false);
     }
+  };
+
+  const markAffectedVoyagesForReview = (dates: Set<string>) => {
+    const affectedIds = new Set(
+      definitions.filter((definition) => voyageOverlapsDates(definition, dates)).map((definition) => definition.id),
+    );
+    if (affectedIds.size === 0) return [] as string[];
+    const reason = `Daily log deleted: ${selectedDateSummary(dates)}`;
+    setDefinitions((current) => normalizeVesselVoyageDefinitions(current.map((definition) => (
+      affectedIds.has(definition.id)
+        ? {
+            ...definition,
+            confirmed: false,
+            interruptionReason: definition.interruptionReason?.trim()
+              ? `${definition.interruptionReason}; ${reason}`
+              : reason,
+          }
+        : definition
+    ))).definitions);
+    return [...affectedIds];
+  };
+
+  const deleteDailyDates = (dates: Set<string>) => {
+    const selectedRecords = dailyLogs.filter((daily) => dates.has(daily.date));
+    if (selectedRecords.length === 0) {
+      toast.error('Select at least one daily-log date.');
+      return;
+    }
+    const affectedVoyages = definitions
+      .filter((definition) => voyageOverlapsDates(definition, dates))
+      .map((definition) => definition.id);
+    const savedDateCount = savedLogs.filter((daily) => dates.has(daily.date)).length;
+    const warning = [
+      `Delete ${selectedRecords.length} date${selectedRecords.length === 1 ? '' : 's'} for ${vesselName.trim() || 'this vessel'}?`,
+      `Dates: ${selectedDateSummary(dates)}.`,
+      savedDateCount > 0 ? 'Click Save changes afterward to make saved-date deletions permanent.' : '',
+      affectedVoyages.length > 0 ? `Affected voyages will return to Review: ${affectedVoyages.join(', ')}.` : '',
+    ].filter(Boolean).join('\n\n');
+    if (!window.confirm(warning)) return;
+
+    const uploadedFileNames = new Set(
+      uploadedLogs.filter((daily) => dates.has(daily.date)).map((daily) => daily.fileName),
+    );
+    setSavedLogs((current) => current.filter((daily) => !dates.has(daily.date)));
+    setUploadedLogs((current) => current.filter((daily) => !dates.has(daily.date)));
+    setManualInputs((current) => current.filter((entry) => !dates.has(entry.date)));
+    setFiles((current) => current.filter((file) => !uploadedFileNames.has(file.name)));
+    setSelectedDates((current) => new Set([...current].filter((date) => !dates.has(date))));
+    if (savedDateCount > 0) setDeletedSavedDateCount((current) => current + savedDateCount);
+    const reviewedVoyages = markAffectedVoyagesForReview(dates);
+    const remainingRange = fullDateRange(dailyLogs.filter((daily) => !dates.has(daily.date)));
+    setDateFrom(remainingRange?.from ?? '');
+    setDateTo(remainingRange?.to ?? '');
+    toast.success(savedDateCount > 0
+      ? `Removed ${selectedRecords.length} date${selectedRecords.length === 1 ? '' : 's'}. Click Save changes to keep the deletion.`
+      : `Removed ${selectedRecords.length} unsaved date${selectedRecords.length === 1 ? '' : 's'}.`);
+    if (reviewedVoyages.length > 0) {
+      toast.info(`${reviewedVoyages.join(', ')} marked for review after the daily-log change.`);
+    }
+  };
+
+  const clearUnsavedEntries = () => {
+    if (pendingEntryCount === 0) return;
+    const dates = new Set([...uploadedLogs, ...manualLogs].map((daily) => daily.date));
+    if (!window.confirm(`Clear ${pendingEntryCount} unsaved entr${pendingEntryCount === 1 ? 'y' : 'ies'}? Saved vessel dates will be kept.`)) return;
+    markAffectedVoyagesForReview(dates);
+    setUploadedLogs([]);
+    setManualInputs([]);
+    setManualDraft(EMPTY_MANUAL_ENTRY);
+    setFiles([]);
+    setSelectedDates((current) => new Set([...current].filter((date) => !dates.has(date))));
+    const range = fullDateRange(savedLogs);
+    setDateFrom(range?.from ?? '');
+    setDateTo(range?.to ?? '');
+    toast.success('Unsaved Excel and manual entries cleared. Saved dates were kept.');
+  };
+
+  const clearVesselHistory = async () => {
+    if (!loadedHistoryId) return;
+    const warning = [
+      `Permanently clear the saved history for ${vesselName}?`,
+      `This deletes ${savedLogs.length} saved daily log${savedLogs.length === 1 ? '' : 's'} and ${definitions.length} voyage row${definitions.length === 1 ? '' : 's'} from this browser.`,
+      pendingEntryCount > 0 ? `It will also discard ${pendingEntryCount} unsaved entr${pendingEntryCount === 1 ? 'y' : 'ies'}.` : '',
+      'Other vessels will not be affected.',
+    ].filter(Boolean).join('\n\n');
+    if (!window.confirm(warning)) return;
+    setHistorySaving(true);
+    try {
+      await clearSavedVesselHistory(loadedHistoryId);
+      const histories = await listSavedVesselHistories();
+      setSavedHistories(histories);
+      setHistorySelection('');
+      setLoadedHistoryId('');
+      setSavedLogs([]);
+      setUploadedLogs([]);
+      setManualInputs([]);
+      setManualDraft(EMPTY_MANUAL_ENTRY);
+      setFiles([]);
+      setDefinitions([]);
+      setSelectedDates(new Set());
+      setDeletedSavedDateCount(0);
+      setVesselName('');
+      setDateFrom('');
+      setDateTo('');
+      toast.success('Vessel history cleared. Other vessels were not changed.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to clear the vessel history.');
+    } finally {
+      setHistorySaving(false);
+    }
+  };
+
+  const toggleDailyDate = (date: string) => {
+    setSelectedDates((current) => {
+      const next = new Set(current);
+      if (next.has(date)) next.delete(date);
+      else next.add(date);
+      return next;
+    });
+  };
+
+  const toggleAllVisibleDates = () => {
+    setSelectedDates((current) => {
+      const next = new Set(current);
+      if (allVisibleDatesSelected) visibleDailyDates.forEach((date) => next.delete(date));
+      else visibleDailyDates.forEach((date) => next.add(date));
+      return next;
+    });
   };
 
   const handleFiles = (selected: FileList | null) => {
@@ -613,16 +777,18 @@ export default function DualDailyLogsVoyagesPage() {
                   ))}
                 </select>
               </label>
-              <div className="flex items-end gap-2">
+              <div className="flex flex-wrap items-end gap-2">
                 <Button type="button" variant="outline" onClick={loadHistory} disabled={!historySelection || historyLoading} className="gap-2">
                   {historyLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <FolderOpen className="h-4 w-4" />}
                   Load
                 </Button>
                 <Button type="button" variant="outline" onClick={startNewHistory}>New vessel</Button>
-                <Button type="button" onClick={saveHistory} disabled={historySaving || dailyLogs.length === 0 || !vesselName.trim()} className="gap-2">
+                <Button type="button" onClick={saveHistory} disabled={historySaving || (!loadedHistoryId && dailyLogs.length === 0) || !vesselName.trim()} className="gap-2">
                   {historySaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                  {loadedHistoryId ? 'Save / append' : 'Save history'}
+                  {loadedHistoryId ? 'Save changes' : 'Save history'}
                 </Button>
+                <Button type="button" variant="outline" onClick={clearUnsavedEntries} disabled={historySaving || pendingEntryCount === 0}>Clear unsaved</Button>
+                <Button type="button" variant="destructive" onClick={clearVesselHistory} disabled={historySaving || !loadedHistoryId}>Clear vessel history</Button>
               </div>
             </div>
           </div>
@@ -637,6 +803,11 @@ export default function DualDailyLogsVoyagesPage() {
             {pendingEntryCount > 0 && (
               <span className="rounded-full bg-amber-500/15 px-3 py-1.5 text-amber-200">
                 {pendingEntryCount} new unsaved entr{pendingEntryCount === 1 ? 'y' : 'ies'}
+              </span>
+            )}
+            {deletedSavedDateCount > 0 && (
+              <span className="rounded-full bg-red-500/15 px-3 py-1.5 text-red-200">
+                {deletedSavedDateCount} saved date{deletedSavedDateCount === 1 ? '' : 's'} removed — click Save changes
               </span>
             )}
           </div>
@@ -782,22 +953,40 @@ export default function DualDailyLogsVoyagesPage() {
             )}
 
             <section className="section-card rounded-2xl border border-border/80 bg-card/60 p-5 shadow-lg">
-              <div className="mb-4">
-                <h2 className="font-semibold">Daily log review</h2>
-                <p className="mt-1 text-xs text-muted-foreground">Saved, Excel, and manual rows are combined, sorted by date, and filtered by the selected output range.</p>
+              <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+                <div>
+                  <h2 className="font-semibold">Daily log review</h2>
+                  <p className="mt-1 text-xs text-muted-foreground">Select one date, several dates, or every visible row. Saved-date deletions become permanent after Save changes.</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs text-muted-foreground">{selectedDates.size} date{selectedDates.size === 1 ? '' : 's'} selected</span>
+                  <Button type="button" variant="outline" onClick={() => setSelectedDates(new Set())} disabled={selectedDates.size === 0}>Clear selection</Button>
+                  <Button type="button" variant="destructive" onClick={() => deleteDailyDates(new Set(selectedDates))} disabled={selectedDates.size === 0} className="gap-2"><Trash2 className="h-4 w-4" />Delete selected</Button>
+                </div>
               </div>
               <div className="overflow-x-auto rounded-xl border border-border/60">
                 <table className="min-w-[1120px] w-full text-xs">
                   <thead className="bg-muted/40 text-muted-foreground">
                     <tr>
-                      {['Source', 'Date', 'Location', 'Activity', 'Port h', 'STBD h', 'ME fuel', 'Other Fuel', 'Day total', 'Status', ''].map((heading, index) => (
+                      <th className="w-10 px-3 py-3 text-left">
+                        <input
+                          type="checkbox"
+                          aria-label="Select all visible daily logs"
+                          checked={allVisibleDatesSelected}
+                          ref={(element) => { if (element) element.indeterminate = someVisibleDatesSelected && !allVisibleDatesSelected; }}
+                          onChange={toggleAllVisibleDates}
+                          className="h-4 w-4 accent-primary"
+                        />
+                      </th>
+                      {['Source', 'Date', 'Location', 'Activity', 'Port h', 'STBD h', 'ME fuel', 'Other Fuel', 'Day total', 'Status', 'Actions'].map((heading, index) => (
                         <th key={`${heading}:${index}`} className="px-3 py-3 text-left font-semibold">{heading}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {filteredDailyLogs.map((daily) => (
-                      <tr key={`${daily.source}:${daily.date}`} className="border-t border-border/40 hover:bg-muted/20">
+                      <tr key={`${daily.source}:${daily.date}`} className={cn('border-t border-border/40 hover:bg-muted/20', selectedDates.has(daily.date) && 'bg-primary/5')}>
+                        <td className="px-3 py-2.5"><input type="checkbox" aria-label={`Select daily log ${daily.date}`} checked={selectedDates.has(daily.date)} onChange={() => toggleDailyDate(daily.date)} className="h-4 w-4 accent-primary" /></td>
                         <td className="px-3 py-2.5"><span className={cn('rounded-full px-2 py-1 text-[10px] font-semibold', daily.source === 'excel' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-sky-500/15 text-sky-300')}>{daily.source === 'excel' ? 'Excel' : 'Manual'}</span></td>
                         <td className="whitespace-nowrap px-3 py-2.5 font-medium">{daily.date}</td>
                         <td className="px-3 py-2.5">{daily.location || '—'}</td>
@@ -809,9 +998,7 @@ export default function DualDailyLogsVoyagesPage() {
                         <td className="px-3 py-2.5 text-right font-semibold">{numberFormat.format(daily.totalFuel)}</td>
                         <td className="px-3 py-2.5"><span className={cn('rounded-full px-2 py-1 text-[10px] font-semibold', daily.warnings.length > 0 ? 'bg-amber-500/15 text-amber-300' : 'bg-emerald-500/15 text-emerald-300')}>{daily.warnings.length > 0 ? `${daily.warnings.length} warning${daily.warnings.length === 1 ? '' : 's'}` : 'Valid'}</span></td>
                         <td className="px-2 py-2">
-                          {daily.source === 'manual' && manualDates.has(daily.date) && (
-                            <button type="button" aria-label={`Remove manual entry ${daily.date}`} onClick={() => setManualInputs((current) => current.filter((entry) => entry.date !== daily.date))} className="rounded p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"><Trash2 className="h-4 w-4" /></button>
-                          )}
+                          <button type="button" aria-label={`Delete daily log ${daily.date}`} onClick={() => deleteDailyDates(new Set([daily.date]))} className="rounded p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"><Trash2 className="h-4 w-4" /></button>
                         </td>
                       </tr>
                     ))}
