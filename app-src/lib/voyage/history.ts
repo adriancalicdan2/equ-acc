@@ -1,4 +1,4 @@
-import type { DailyLogRecord } from './types';
+import type { DailyLogRecord, VoyageDefinition } from './types';
 import { cleanVesselName, vesselFileStem } from './vessel.ts';
 
 function fnv1a(value: string) {
@@ -40,6 +40,27 @@ export function appendDailyLogHistory(
       .sort((left, right) => left.date.localeCompare(right.date)),
     added: newLogs.length,
     skipped: incomingByDate.size - newLogs.length,
+  };
+}
+
+export function normalizeVesselVoyageDefinitions(definitions: VoyageDefinition[]) {
+  const vesselDefinitions = definitions.filter((definition) => (
+    definition.source === 'manual' || definition.source === 'suggested'
+  ));
+  const sorted = [...vesselDefinitions].sort((left, right) => (
+    left.departure.localeCompare(right.departure)
+      || left.arrival.localeCompare(right.arrival)
+      || left.id.localeCompare(right.id, undefined, { numeric: true })
+  ));
+  const normalized = sorted.map((definition, index) => ({
+    ...definition,
+    id: `V${index + 1}`,
+    cycle: Math.ceil((index + 1) / 2),
+    displayCycle: index % 2 === 0,
+  }));
+  return {
+    definitions: normalized,
+    removedLegacyCount: definitions.length - vesselDefinitions.length,
   };
 }
 

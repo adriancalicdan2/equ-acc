@@ -1,6 +1,6 @@
 import { auth } from '@/lib/firebase/client';
 import type { DailyLogRecord, VoyageDefinition } from './types';
-import { appendDailyLogHistory, vesselHistoryId } from './history';
+import { appendDailyLogHistory, normalizeVesselVoyageDefinitions, vesselHistoryId } from './history';
 import { cleanVesselName } from './vessel';
 
 const DATABASE_NAME = 'aimf-vessel-reporting';
@@ -19,6 +19,7 @@ export interface SavedVesselHistorySummary {
 export interface SavedVesselHistory extends SavedVesselHistorySummary {
   dailyLogs: DailyLogRecord[];
   definitions: VoyageDefinition[];
+  removedLegacyVoyageCount?: number;
 }
 
 interface StoredVesselHistory extends SavedVesselHistory {
@@ -123,6 +124,11 @@ export async function listSavedVesselHistories() {
 export async function loadSavedVesselHistory(historyId: string) {
   const history = await readHistory(currentUserId(), historyId);
   if (!history) throw new Error('The selected saved vessel was not found in this browser.');
+  const normalized = normalizeVesselVoyageDefinitions(history.definitions ?? []);
+  if (normalized.removedLegacyCount > 0
+    || normalized.definitions.some((definition, index) => definition.id !== history.definitions[index]?.id)) {
+    await writeHistory({ ...history, definitions: normalized.definitions, updatedAt: new Date().toISOString() });
+  }
   return {
     id: history.id,
     vesselName: history.vesselName,
@@ -131,7 +137,8 @@ export async function loadSavedVesselHistory(historyId: string) {
     lastDate: history.lastDate,
     updatedAt: history.updatedAt,
     dailyLogs: history.dailyLogs,
-    definitions: history.definitions,
+    definitions: normalized.definitions,
+    removedLegacyVoyageCount: normalized.removedLegacyCount,
   };
 }
 
@@ -163,7 +170,7 @@ export async function saveVesselHistory(options: {
       lastDate: dates.at(-1) ?? '',
       updatedAt: new Date().toISOString(),
       dailyLogs,
-      definitions: options.definitions,
+      definitions: normalizeVesselVoyageDefinitions(options.definitions).definitions,
     });
   } catch (error) {
     if (error instanceof DOMException && error.name === 'QuotaExceededError') {

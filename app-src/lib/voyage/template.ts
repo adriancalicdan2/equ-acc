@@ -4,7 +4,7 @@ import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import type { DailyLogRecord, VoyageDefinition, VoyageResult } from './types';
+import type { DailyLogRecord, VoyageResult } from './types';
 
 const TEMPLATE_NAME = 'Daily_Logs_&Voyage.xlsx';
 
@@ -189,30 +189,6 @@ function templatePath() {
   return path.join(process.cwd(), 'public', 'templates', TEMPLATE_NAME);
 }
 
-function dateToIso(value: unknown) {
-  if (!(value instanceof Date) || Number.isNaN(value.getTime())) return '';
-  return new Date(Date.UTC(
-    value.getUTCFullYear(),
-    value.getUTCMonth(),
-    value.getUTCDate(),
-    value.getUTCHours(),
-    value.getUTCMinutes(),
-    value.getUTCSeconds(),
-  )).toISOString();
-}
-
-function dateKey(value: unknown) {
-  if (value instanceof Date && !Number.isNaN(value.getTime())) return dateToIso(value).slice(0, 10);
-  if (typeof value !== 'string' || !value.trim()) return '';
-  const parsed = new Date(value.replace(/,(?=\d{4})/, ', '));
-  if (Number.isNaN(parsed.getTime())) return '';
-  return [
-    parsed.getFullYear(),
-    String(parsed.getMonth() + 1).padStart(2, '0'),
-    String(parsed.getDate()).padStart(2, '0'),
-  ].join('-');
-}
-
 function excelDate(iso: string) {
   return new Date(iso);
 }
@@ -242,55 +218,6 @@ async function loadTemplate() {
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.readFile(templatePath());
   return workbook;
-}
-
-export async function loadVoyageTemplateData() {
-  const workbook = await loadTemplate();
-  const voyageSheet = workbook.getWorksheet('Voyage Summary');
-  const dailySheet = workbook.getWorksheet('Daily log');
-  if (!voyageSheet || !dailySheet) throw new Error('The vessel report template is missing required worksheets.');
-
-  const definitions: VoyageDefinition[] = [];
-  let currentCycle = 0;
-  for (let rowNumber = 5; rowNumber <= 200; rowNumber += 1) {
-    const row = voyageSheet.getRow(rowNumber);
-    const label = String(row.getCell(1).value ?? '').trim();
-    if (/^TOTAL/i.test(label)) break;
-    const departure = dateToIso(row.getCell(4).value);
-    const arrival = dateToIso(row.getCell(5).value);
-    if (!departure || !arrival) continue;
-    const numericCycle = Number(row.getCell(1).value);
-    const displayCycle = Number.isFinite(numericCycle) && numericCycle > 0;
-    if (displayCycle) currentCycle = numericCycle;
-    definitions.push({
-      id: `V${definitions.length + 1}`,
-      cycle: currentCycle || Math.ceil((definitions.length + 1) / 2),
-      displayCycle,
-      from: String(row.getCell(2).value ?? '').trim(),
-      to: String(row.getCell(3).value ?? '').trim(),
-      departure,
-      arrival,
-      distance: Number(row.getCell(11).value ?? 0),
-      averageSpeed: Number(row.getCell(12).value ?? 0),
-      status: 'completed',
-      source: 'template',
-      confirmed: true,
-      interruptionReason: '',
-    });
-  }
-
-  const dailyMetadata = new Map<string, { location: string; activity: string }>();
-  for (let rowNumber = 5; rowNumber <= 200; rowNumber += 1) {
-    const row = dailySheet.getRow(rowNumber);
-    const key = dateKey(row.getCell(1).value);
-    if (!key) continue;
-    dailyMetadata.set(key, {
-      location: String(row.getCell(2).value ?? '').trim(),
-      activity: String(row.getCell(3).value ?? '').trim(),
-    });
-  }
-
-  return { definitions, dailyMetadata };
 }
 
 function monthLabel(key: string) {

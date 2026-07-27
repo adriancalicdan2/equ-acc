@@ -32,7 +32,11 @@ import {
 } from '@/lib/voyage/vesselHistoryClient';
 import { calculateVoyages } from '@/lib/voyage/calculations';
 import { suggestVoyageDefinitions } from '@/lib/voyage/detection';
-import { duplicateDailyLogDates, vesselHistoryId } from '@/lib/voyage/history';
+import {
+  duplicateDailyLogDates,
+  normalizeVesselVoyageDefinitions,
+  vesselHistoryId,
+} from '@/lib/voyage/history';
 import {
   dailyInDateRange,
   manualInputToDailyLog,
@@ -89,7 +93,7 @@ function voyageDefinition(voyage: VoyageResult): VoyageDefinition {
     distance: voyage.distance,
     averageSpeed: voyage.averageSpeed,
     status: voyage.status ?? 'completed',
-    source: voyage.source ?? 'template',
+    source: voyage.source === 'suggested' ? 'suggested' : 'manual',
     confirmed: voyage.confirmed ?? true,
     interruptionReason: voyage.interruptionReason ?? '',
     mainEngineFuelOverride: voyage.mainEngineFuelOverride ?? null,
@@ -131,32 +135,12 @@ export default function DualDailyLogsVoyagesPage() {
   const [manualDraft, setManualDraft] = useState<ManualDailyLogInput>(EMPTY_MANUAL_ENTRY);
   const [vesselName, setVesselName] = useState('');
   const [definitions, setDefinitions] = useState<VoyageDefinition[]>([]);
-  const [defaultDefinitions, setDefaultDefinitions] = useState<VoyageDefinition[]>([]);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [analyzing, setAnalyzing] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historySaving, setHistorySaving] = useState(false);
-
-  useEffect(() => {
-    let active = true;
-    const loadTemplateDefinitions = async () => {
-      try {
-        const response = await authenticatedFetch('/api/analyze-voyage-logs');
-        const payload = await readApiJson<AnalysisResponse | { error?: string }>(response);
-        if (active && response.ok && 'voyages' in payload) {
-          const templateDefinitions = payload.voyages.map(voyageDefinition);
-          setDefinitions((current) => current.length > 0 ? current : templateDefinitions);
-          setDefaultDefinitions(templateDefinitions);
-        }
-      } catch {
-        // The route guard handles unauthenticated navigation; upload analysis can retry later.
-      }
-    };
-    void loadTemplateDefinitions();
-    return () => { active = false; };
-  }, []);
 
   useEffect(() => {
     if (!user) return;
@@ -259,10 +243,13 @@ export default function DualDailyLogsVoyagesPage() {
       setManualInputs([]);
       setManualDraft(EMPTY_MANUAL_ENTRY);
       setFiles([]);
-      setDefinitions(history.definitions.length > 0 ? history.definitions : defaultDefinitions);
+      setDefinitions(history.definitions);
       const range = fullDateRange(history.dailyLogs);
       setDateFrom(range?.from ?? '');
       setDateTo(range?.to ?? '');
+      if (history.removedLegacyVoyageCount) {
+        toast.info(`${history.removedLegacyVoyageCount} legacy template voyage row${history.removedLegacyVoyageCount === 1 ? '' : 's'} removed. Daily logs were kept.`);
+      }
       toast.success(`Loaded ${history.entryCount} saved daily entries for ${history.vesselName}.`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Unable to load the saved vessel.');
@@ -281,7 +268,7 @@ export default function DualDailyLogsVoyagesPage() {
     setManualDraft(EMPTY_MANUAL_ENTRY);
     setFiles([]);
     setVesselName('');
-    setDefinitions(defaultDefinitions);
+    setDefinitions([]);
     setDateFrom('');
     setDateTo('');
   };
@@ -385,8 +372,9 @@ export default function DualDailyLogsVoyagesPage() {
         setVesselName((current) => current.trim() ? current : detected[0]);
       }
       setUploadedLogs(payload.dailyLogs);
-      const analyzedDefinitions = payload.voyages.map(voyageDefinition);
-      setDefaultDefinitions(analyzedDefinitions);
+      const analyzedDefinitions = normalizeVesselVoyageDefinitions(
+        payload.voyages.map(voyageDefinition),
+      ).definitions;
       if (!loadedHistoryId) setDefinitions(analyzedDefinitions);
       const range = fullDateRange(combinedDates);
       if (range) {
@@ -448,18 +436,15 @@ export default function DualDailyLogsVoyagesPage() {
       toast.error('Add daily data before adding a voyage.');
       return;
     }
-    const nextNumber = definitions.reduce((max, definition) => {
-      const number = Number(definition.id.replace(/\D/g, ''));
-      return Number.isFinite(number) ? Math.max(max, number) : max;
-    }, 0) + 1;
-    setDefinitions((current) => [...current, {
-      id: `V${nextNumber}`,
-      cycle: Math.ceil(nextNumber / 2),
-      displayCycle: nextNumber % 2 === 1,
+    const defaultDate = rangeValid ? dateFrom : range.from;
+    setDefinitions((current) => normalizeVesselVoyageDefinitions([...current, {
+      id: `V${current.length + 1}`,
+      cycle: 1,
+      displayCycle: true,
       from: '',
       to: '',
-      departure: `${range.from}T00:00:00.000Z`,
-      arrival: `${range.to}T23:59:59.000Z`,
+      departure: `${defaultDate}T00:00:00.000Z`,
+      arrival: `${defaultDate}T23:59:59.000Z`,
       distance: 0,
       averageSpeed: 0,
       status: 'planned',
@@ -468,7 +453,7 @@ export default function DualDailyLogsVoyagesPage() {
       interruptionReason: '',
       mainEngineFuelOverride: null,
       otherFuelOverride: null,
-    }]);
+    }]).definitions);
   };
 
   const suggestVoyages = () => {
@@ -479,15 +464,7 @@ export default function DualDailyLogsVoyagesPage() {
     }
     setDefinitions((current) => {
       const preserved = current.filter((definition) => definition.source !== 'suggested');
-      return [
-        ...preserved,
-        ...suggestions.map((suggestion, index) => ({
-          ...suggestion,
-          id: `V${preserved.length + index + 1}`,
-          cycle: Math.ceil((preserved.length + index + 1) / 2),
-          displayCycle: (preserved.length + index) % 2 === 0,
-        })),
-      ];
+      return normalizeVesselVoyageDefinitions([...preserved, ...suggestions]).definitions;
     });
     toast.success(`Created ${suggestions.length} unconfirmed voyage suggestion${suggestions.length === 1 ? '' : 's'}.`);
   };
@@ -498,7 +475,7 @@ export default function DualDailyLogsVoyagesPage() {
       if (index <= 0) return current;
       const previous = current[index - 1];
       const selected = current[index];
-      return current
+      const merged = current
         .map((definition, definitionIndex) => definitionIndex === index - 1 ? {
           ...previous,
           arrival: selected.arrival,
@@ -507,6 +484,7 @@ export default function DualDailyLogsVoyagesPage() {
           interruptionReason: previous.interruptionReason || 'Merged after voyage interruption review',
         } : definition)
         .filter((_, definitionIndex) => definitionIndex !== index);
+      return normalizeVesselVoyageDefinitions(merged).definitions;
     });
   };
 
@@ -596,7 +574,7 @@ export default function DualDailyLogsVoyagesPage() {
                 value={vesselName}
                 onChange={(event) => setVesselName(event.target.value)}
                 maxLength={80}
-                placeholder="e.g. Harbor Master 2"
+                placeholder="Enter vessel name"
                 className="h-11 text-sm font-semibold"
               />
             </label>
@@ -730,7 +708,7 @@ export default function DualDailyLogsVoyagesPage() {
             </div>
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               <label className="space-y-1 text-xs text-muted-foreground">Date<Input type="date" value={manualDraft.date} onChange={(event) => updateManualDraft('date', event.target.value)} /></label>
-              <label className="space-y-1 text-xs text-muted-foreground">Location / leg<Input value={manualDraft.location} onChange={(event) => updateManualDraft('location', event.target.value)} placeholder="Perez" /></label>
+              <label className="space-y-1 text-xs text-muted-foreground">Location / leg<Input value={manualDraft.location} onChange={(event) => updateManualDraft('location', event.target.value)} placeholder="Port / destination" /></label>
               <label className="space-y-1 text-xs text-muted-foreground">Activity<Input value={manualDraft.activity} onChange={(event) => updateManualDraft('activity', event.target.value)} placeholder="Transit / in port" /></label>
               <label className="space-y-1 text-xs text-muted-foreground">Port ME hours<Input type="number" min="0" max="24" step="0.01" value={manualDraft.portHours} onChange={(event) => updateManualDraft('portHours', parseNonNegative(event.target.value))} /></label>
               <label className="space-y-1 text-xs text-muted-foreground">STBD ME hours<Input type="number" min="0" max="24" step="0.01" value={manualDraft.starboardHours} onChange={(event) => updateManualDraft('starboardHours', parseNonNegative(event.target.value))} /></label>
@@ -853,6 +831,19 @@ export default function DualDailyLogsVoyagesPage() {
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <Button type="button" variant="outline" onClick={suggestVoyages} className="gap-2"><Gauge className="h-4 w-4" />Suggest from ME activity</Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      if (definitions.length === 0) return;
+                      if (!window.confirm('Clear all voyage rows for this vessel? Daily logs will be kept.')) return;
+                      setDefinitions([]);
+                      toast.success('Voyages reset. Daily logs were not changed.');
+                    }}
+                    className="gap-2"
+                  >
+                    <RotateCcw className="h-4 w-4" />Reset voyages
+                  </Button>
                   <Button type="button" onClick={addManualVoyage} className="gap-2"><Plus className="h-4 w-4" />Add voyage</Button>
                 </div>
               </div>
@@ -919,7 +910,9 @@ export default function DualDailyLogsVoyagesPage() {
                             <td className="px-2 py-2">
                               <div className="flex gap-1">
                                 <Button type="button" variant="outline" size="sm" disabled={voyageIndex === 0} onClick={() => mergeWithPreviousVoyage(voyage.id)} className="h-8 px-2 text-[10px]">Merge previous</Button>
-                                <button type="button" aria-label={`Delete ${voyage.id}`} onClick={() => setDefinitions((current) => current.filter((definition) => definition.id !== voyage.id))} className="rounded p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"><Trash2 className="h-4 w-4" /></button>
+                                <button type="button" aria-label={`Delete ${voyage.id}`} onClick={() => setDefinitions((current) => normalizeVesselVoyageDefinitions(
+                                  current.filter((definition) => definition.id !== voyage.id),
+                                ).definitions)} className="rounded p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"><Trash2 className="h-4 w-4" /></button>
                               </div>
                             </td>
                           </tr>
