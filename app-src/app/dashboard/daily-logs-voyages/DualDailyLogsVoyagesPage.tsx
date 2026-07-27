@@ -5,13 +5,16 @@ import {
   AlertTriangle,
   CalendarRange,
   CheckCircle2,
+  Database,
   Download,
+  FolderOpen,
   FileSpreadsheet,
   Gauge,
   Keyboard,
   Loader2,
   Plus,
   RotateCcw,
+  Save,
   Ship,
   Trash2,
   UploadCloud,
@@ -20,7 +23,15 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { authenticatedFetch } from '@/lib/firebase/authenticatedFetch';
+import { useAuth } from '@/lib/firebase/AuthContext';
+import {
+  listSavedVesselHistories,
+  loadSavedVesselHistory,
+  saveVesselHistory,
+  type SavedVesselHistorySummary,
+} from '@/lib/voyage/vesselHistoryClient';
 import { calculateVoyages } from '@/lib/voyage/calculations';
+import { duplicateDailyLogDates, vesselHistoryId } from '@/lib/voyage/history';
 import {
   dailyInDateRange,
   manualInputToDailyLog,
@@ -34,7 +45,7 @@ import type {
   VoyageResult,
 } from '@/lib/voyage/types';
 import { cn } from '@/lib/utils';
-import { detectedVesselNames, vesselFileStem } from '@/lib/voyage/vessel';
+import { cleanVesselName, detectedVesselNames, vesselFileStem } from '@/lib/voyage/vessel';
 
 interface AnalysisResponse {
   dailyLogs: DailyLogRecord[];
@@ -103,17 +114,25 @@ async function readApiJson<T>(response: Response): Promise<T> {
   }
 }
 export default function DualDailyLogsVoyagesPage() {
+  const { user } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [files, setFiles] = useState<File[]>([]);
   const [uploadedLogs, setUploadedLogs] = useState<DailyLogRecord[]>([]);
+  const [savedLogs, setSavedLogs] = useState<DailyLogRecord[]>([]);
+  const [savedHistories, setSavedHistories] = useState<SavedVesselHistorySummary[]>([]);
+  const [historySelection, setHistorySelection] = useState('');
+  const [loadedHistoryId, setLoadedHistoryId] = useState('');
   const [manualInputs, setManualInputs] = useState<ManualDailyLogInput[]>([]);
   const [manualDraft, setManualDraft] = useState<ManualDailyLogInput>(EMPTY_MANUAL_ENTRY);
   const [vesselName, setVesselName] = useState('');
   const [definitions, setDefinitions] = useState<VoyageDefinition[]>([]);
+  const [defaultDefinitions, setDefaultDefinitions] = useState<VoyageDefinition[]>([]);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [analyzing, setAnalyzing] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historySaving, setHistorySaving] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -122,7 +141,9 @@ export default function DualDailyLogsVoyagesPage() {
         const response = await authenticatedFetch('/api/analyze-voyage-logs');
         const payload = await readApiJson<AnalysisResponse | { error?: string }>(response);
         if (active && response.ok && 'voyages' in payload) {
-          setDefinitions(payload.voyages.map(voyageDefinition));
+          const templateDefinitions = payload.voyages.map(voyageDefinition);
+          setDefinitions((current) => current.length > 0 ? current : templateDefinitions);
+          setDefaultDefinitions(templateDefinitions);
         }
       } catch {
         // The route guard handles unauthenticated navigation; upload analysis can retry later.
@@ -131,6 +152,23 @@ export default function DualDailyLogsVoyagesPage() {
     void loadTemplateDefinitions();
     return () => { active = false; };
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    let active = true;
+    const loadHistories = async () => {
+      try {
+        const histories = await listSavedVesselHistories();
+        if (active) setSavedHistories(histories);
+      } catch (error) {
+        if (active) {
+          toast.error(error instanceof Error ? error.message : 'Unable to load saved vessel histories.');
+        }
+      }
+    };
+    void loadHistories();
+    return () => { active = false; };
+  }, [user]);
 
   const manualLogs = useMemo(
     () => manualInputs.map((input) => manualInputToDailyLog(input, vesselName)),
@@ -141,9 +179,15 @@ export default function DualDailyLogsVoyagesPage() {
     [uploadedLogs],
   );
   const dailyLogs = useMemo(
-    () => [...uploadedLogs, ...manualLogs].sort((a, b) => a.date.localeCompare(b.date)),
-    [manualLogs, uploadedLogs],
+    () => [...savedLogs, ...uploadedLogs, ...manualLogs].sort((a, b) => a.date.localeCompare(b.date)),
+    [manualLogs, savedLogs, uploadedLogs],
   );
+  const manualDates = useMemo(
+    () => new Set(manualInputs.map((entry) => entry.date)),
+    [manualInputs],
+  );
+  const pendingEntryCount = uploadedLogs.length + manualInputs.length;
+  const loadedHistory = savedHistories.find((history) => history.id === loadedHistoryId);
   const rangeValid = Boolean(dateFrom && dateTo && validateDateRange(dateFrom, dateTo));
   const allVoyages = useMemo(
     () => calculateVoyages(dailyLogs, definitions),
@@ -189,6 +233,99 @@ export default function DualDailyLogsVoyagesPage() {
     setDateTo(range.to);
   };
 
+  const loadHistory = async () => {
+    if (!historySelection) {
+      toast.error('Choose a saved vessel first.');
+      return;
+    }
+    if (pendingEntryCount > 0 && !window.confirm('Loading another vessel will discard the current unsaved entries. Continue?')) return;
+    setHistoryLoading(true);
+    try {
+      const history = await loadSavedVesselHistory(historySelection);
+      setLoadedHistoryId(history.id);
+      setHistorySelection(history.id);
+      setVesselName(history.vesselName);
+      setSavedLogs(history.dailyLogs);
+      setUploadedLogs([]);
+      setManualInputs([]);
+      setManualDraft(EMPTY_MANUAL_ENTRY);
+      setFiles([]);
+      setDefinitions(history.definitions.length > 0 ? history.definitions : defaultDefinitions);
+      const range = fullDateRange(history.dailyLogs);
+      setDateFrom(range?.from ?? '');
+      setDateTo(range?.to ?? '');
+      toast.success(`Loaded ${history.entryCount} saved daily entries for ${history.vesselName}.`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to load the saved vessel.');
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  const startNewHistory = () => {
+    if (pendingEntryCount > 0 && !window.confirm('Starting a new vessel will discard the current unsaved entries. Continue?')) return;
+    setHistorySelection('');
+    setLoadedHistoryId('');
+    setSavedLogs([]);
+    setUploadedLogs([]);
+    setManualInputs([]);
+    setManualDraft(EMPTY_MANUAL_ENTRY);
+    setFiles([]);
+    setVesselName('');
+    setDefinitions(defaultDefinitions);
+    setDateFrom('');
+    setDateTo('');
+  };
+
+  const saveHistory = async () => {
+    if (!user) {
+      toast.error('Sign in again before saving.');
+      return;
+    }
+    if (!vesselName.trim()) {
+      toast.error('Enter the vessel name before saving.');
+      return;
+    }
+    if (loadedHistoryId && vesselHistoryId(vesselName) !== loadedHistoryId) {
+      toast.error('The loaded vessel name was changed. Choose New vessel to save it separately.');
+      return;
+    }
+    if (dailyLogs.length === 0) {
+      toast.error('Analyze Excel files or add a manual entry before saving.');
+      return;
+    }
+    setHistorySaving(true);
+    try {
+      const result = await saveVesselHistory({
+        vesselName,
+        dailyLogs,
+        definitions,
+      });
+      const [history, histories] = await Promise.all([
+        loadSavedVesselHistory(result.id),
+        listSavedVesselHistories(),
+      ]);
+      setSavedHistories(histories);
+      setHistorySelection(history.id);
+      setLoadedHistoryId(history.id);
+      setVesselName(history.vesselName);
+      setSavedLogs(history.dailyLogs);
+      setUploadedLogs([]);
+      setManualInputs([]);
+      setFiles([]);
+      const range = fullDateRange(history.dailyLogs);
+      setDateFrom(range?.from ?? '');
+      setDateTo(range?.to ?? '');
+      toast.success(result.added > 0
+        ? `Saved ${result.added} new entr${result.added === 1 ? 'y' : 'ies'}; ${result.total} total for ${history.vesselName}.`
+        : `No duplicate dates were added. ${result.total} saved entries remain.`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to save the vessel history.');
+    } finally {
+      setHistorySaving(false);
+    }
+  };
+
   const handleFiles = (selected: FileList | null) => {
     if (!selected) return;
     const next = Array.from(selected).filter((file) => /\.xlsx?$/i.test(file.name));
@@ -221,16 +358,27 @@ export default function DualDailyLogsVoyagesPage() {
       if (!response.ok || !('dailyLogs' in payload)) {
         throw new Error('error' in payload ? payload.error : 'Analysis failed.');
       }
-      const combinedDates = [...payload.dailyLogs, ...manualLogs];
+      const duplicates = duplicateDailyLogDates([...savedLogs, ...manualLogs], payload.dailyLogs);
+      if (duplicates.length > 0) {
+        throw new Error(`These dates already exist in the saved or manual history: ${duplicates.join(', ')}.`);
+      }
+      const combinedDates = [...savedLogs, ...payload.dailyLogs, ...manualLogs];
       const detected = detectedVesselNames(payload.dailyLogs);
       if (detected.length > 1) {
         throw new Error(`The uploaded files contain more than one vessel: ${detected.join(', ')}.`);
+      }
+      if (detected.length === 1 && savedLogs.length > 0
+        && cleanVesselName(detected[0]).toLocaleLowerCase('en-US')
+          !== cleanVesselName(vesselName).toLocaleLowerCase('en-US')) {
+        throw new Error(`The uploaded files are for ${detected[0]}, not ${vesselName}.`);
       }
       if (detected.length === 1) {
         setVesselName((current) => current.trim() ? current : detected[0]);
       }
       setUploadedLogs(payload.dailyLogs);
-      setDefinitions(payload.voyages.map(voyageDefinition));
+      const analyzedDefinitions = payload.voyages.map(voyageDefinition);
+      setDefaultDefinitions(analyzedDefinitions);
+      if (!loadedHistoryId) setDefinitions(analyzedDefinitions);
       const range = fullDateRange(combinedDates);
       if (range) {
         setDateFrom(range.from);
@@ -303,6 +451,7 @@ export default function DualDailyLogsVoyagesPage() {
       const body = formDataWithFiles();
       body.append('vesselName', vesselName.trim());
       body.append('manualLogs', JSON.stringify(manualInputs));
+      body.append('savedLogs', JSON.stringify(savedLogs));
       body.append('voyages', JSON.stringify(definitions));
       body.append('dateFrom', dateFrom);
       body.append('dateTo', dateTo);
@@ -376,6 +525,62 @@ export default function DualDailyLogsVoyagesPage() {
               ? `Detected in uploaded Excel: ${detectedVessels[0]}. The name above will be used in workbook titles and the download filename.`
               : 'The selected vessel name will be used for both manual entries and uploaded Excel data.'}
           </p>
+        </section>
+
+        <section className="section-card rounded-2xl border border-border/80 bg-card/60 p-5 shadow-lg">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+            <div className="flex items-start gap-3">
+              <span className="rounded-xl bg-violet-500/15 p-2.5 text-violet-300"><Database className="h-5 w-5" /></span>
+              <div>
+                <h2 className="font-semibold">Saved vessel history</h2>
+                <p className="mt-1 max-w-2xl text-xs text-muted-foreground">
+                  Saved on this browser for your signed-in account. Load a vessel, add the next month by Excel or manual entry, then save again.
+                </p>
+              </div>
+            </div>
+            <div className="flex w-full flex-col gap-2 sm:flex-row xl:w-auto">
+              <label className="min-w-64 flex-1 space-y-1 text-xs text-muted-foreground">
+                Saved vessel
+                <select
+                  value={historySelection}
+                  onChange={(event) => setHistorySelection(event.target.value)}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                >
+                  <option value="">{savedHistories.length === 0 ? 'No saved vessels yet' : 'Choose a vessel'}</option>
+                  {savedHistories.map((history) => (
+                    <option key={history.id} value={history.id}>
+                      {history.vesselName} ({history.entryCount} days)
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="flex items-end gap-2">
+                <Button type="button" variant="outline" onClick={loadHistory} disabled={!historySelection || historyLoading} className="gap-2">
+                  {historyLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <FolderOpen className="h-4 w-4" />}
+                  Load
+                </Button>
+                <Button type="button" variant="outline" onClick={startNewHistory}>New vessel</Button>
+                <Button type="button" onClick={saveHistory} disabled={historySaving || dailyLogs.length === 0 || !vesselName.trim()} className="gap-2">
+                  {historySaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  {loadedHistoryId ? 'Save / append' : 'Save history'}
+                </Button>
+              </div>
+            </div>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2 text-xs">
+            {loadedHistory ? (
+              <span className="rounded-full bg-violet-500/15 px-3 py-1.5 text-violet-200">
+                Loaded: {loadedHistory.vesselName} / {savedLogs.length} saved days / {loadedHistory.firstDate} to {loadedHistory.lastDate}
+              </span>
+            ) : (
+              <span className="rounded-full bg-muted/40 px-3 py-1.5 text-muted-foreground">No saved vessel loaded on this browser</span>
+            )}
+            {pendingEntryCount > 0 && (
+              <span className="rounded-full bg-amber-500/15 px-3 py-1.5 text-amber-200">
+                {pendingEntryCount} new unsaved entr{pendingEntryCount === 1 ? 'y' : 'ies'}
+              </span>
+            )}
+          </div>
         </section>
 
         <section className="grid gap-5 xl:grid-cols-2">
@@ -487,7 +692,7 @@ export default function DualDailyLogsVoyagesPage() {
 
             <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
               {[
-                { label: 'Daily entries', value: String(filteredDailyLogs.length), note: `${uploadedLogs.length} Excel · ${manualInputs.length} manual total` },
+                { label: 'Daily entries', value: String(filteredDailyLogs.length), note: `${savedLogs.length} saved / ${uploadedLogs.length} new Excel / ${manualInputs.length} new manual` },
                 { label: 'Daily total fuel', value: `${numberFormat.format(dailyTotals.total)} L`, note: `${numberFormat.format(dailyTotals.main)} L main engines` },
                 { label: 'Voyage total fuel', value: `${numberFormat.format(voyageTotals.total)} L`, note: `${numberFormat.format(voyageTotals.auxiliary)} L all AE` },
                 { label: 'Validation warnings', value: String(warnings.length), note: warnings.length === 0 ? 'Ready to generate' : 'Review highlighted items' },
@@ -521,7 +726,7 @@ export default function DualDailyLogsVoyagesPage() {
             <section className="section-card rounded-2xl border border-border/80 bg-card/60 p-5 shadow-lg">
               <div className="mb-4">
                 <h2 className="font-semibold">Daily log review</h2>
-                <p className="mt-1 text-xs text-muted-foreground">Excel and manual rows are combined, sorted by date, and filtered by the selected output range.</p>
+                <p className="mt-1 text-xs text-muted-foreground">Saved, Excel, and manual rows are combined, sorted by date, and filtered by the selected output range.</p>
               </div>
               <div className="overflow-x-auto rounded-xl border border-border/60">
                 <table className="min-w-[1120px] w-full text-xs">
@@ -547,7 +752,7 @@ export default function DualDailyLogsVoyagesPage() {
                         <td className="px-3 py-2.5 text-right font-semibold">{numberFormat.format(daily.totalFuel)}</td>
                         <td className="px-3 py-2.5"><span className={cn('rounded-full px-2 py-1 text-[10px] font-semibold', daily.warnings.length > 0 ? 'bg-amber-500/15 text-amber-300' : 'bg-emerald-500/15 text-emerald-300')}>{daily.warnings.length > 0 ? `${daily.warnings.length} warning${daily.warnings.length === 1 ? '' : 's'}` : 'Valid'}</span></td>
                         <td className="px-2 py-2">
-                          {daily.source === 'manual' && (
+                          {daily.source === 'manual' && manualDates.has(daily.date) && (
                             <button type="button" aria-label={`Remove manual entry ${daily.date}`} onClick={() => setManualInputs((current) => current.filter((entry) => entry.date !== daily.date))} className="rounded p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"><Trash2 className="h-4 w-4" /></button>
                           )}
                         </td>

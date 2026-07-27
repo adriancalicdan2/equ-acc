@@ -10,6 +10,7 @@ import {
   voyageInDateRange,
 } from '@/lib/voyage/manual';
 import {
+  dailyLogRecordSchema,
   manualDailyLogInputSchema,
   reportDateSchema,
   vesselNameSchema,
@@ -55,6 +56,13 @@ export async function POST(request: NextRequest) {
       [],
       250_000,
     );
+    const savedLogs = parseJsonField(
+      formData,
+      'savedLogs',
+      z.array(dailyLogRecordSchema).max(1_000),
+      [],
+      5_000_000,
+    );
     const vesselName = vesselNameSchema.parse(formData.get('vesselName'));
     const dateFrom = reportDateSchema.parse(formData.get('dateFrom'));
     const dateTo = reportDateSchema.parse(formData.get('dateTo'));
@@ -71,7 +79,7 @@ export async function POST(request: NextRequest) {
         daily.activity = metadata.activity;
       }
     }
-    const allDailyLogs = mergeDailyLogs(uploadedLogs, manualInputs, vesselName);
+    const allDailyLogs = mergeDailyLogs([...savedLogs, ...uploadedLogs], manualInputs, vesselName);
     if (allDailyLogs.length === 0) throw new Error('Add a manual entry or upload at least one daily report.');
     const allVoyages = calculateVoyages(allDailyLogs, definitions);
     const filteredDailyLogs = allDailyLogs.filter((daily) => dailyInDateRange(daily, dateFrom, dateTo));
