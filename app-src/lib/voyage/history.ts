@@ -43,6 +43,34 @@ export function appendDailyLogHistory(
   };
 }
 
+export function replaceDailyLogHistory(
+  existing: DailyLogRecord[],
+  incoming: DailyLogRecord[],
+  vesselName: string,
+) {
+  const existingDates = new Set(existing.map((daily) => daily.date));
+  const incomingByDate = new Map<string, DailyLogRecord>();
+
+  for (const daily of incoming) {
+    if (incomingByDate.has(daily.date)) {
+      throw new Error(`More than one daily entry exists for ${daily.date}.`);
+    }
+    incomingByDate.set(daily.date, {
+      ...daily,
+      vesselName: cleanVesselName(vesselName),
+    });
+  }
+
+  const incomingDates = new Set(incomingByDate.keys());
+  return {
+    dailyLogs: [...incomingByDate.values()]
+      .sort((left, right) => left.date.localeCompare(right.date)),
+    added: [...incomingDates].filter((date) => !existingDates.has(date)).length,
+    skipped: 0,
+    deleted: [...existingDates].filter((date) => !incomingDates.has(date)).length,
+  };
+}
+
 export function normalizeVesselVoyageDefinitions(definitions: VoyageDefinition[]) {
   const vesselDefinitions = definitions.filter((definition) => (
     definition.source === 'manual' || definition.source === 'suggested'
