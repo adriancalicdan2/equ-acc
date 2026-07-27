@@ -41,7 +41,7 @@ function voyage(overrides: Partial<VoyageDefinition> = {}): VoyageDefinition {
   };
 }
 
-test('manual daily values populate daily totals and all-AE fuel', () => {
+test('manual daily values fold legacy AE values into Other Fuel', () => {
   const daily = manualInputToDailyLog(manual('2026-05-29'), 'Harbor Master 2');
   assert.equal(daily.source, 'manual');
   assert.equal(daily.vesselName, 'Harbor Master 2');
@@ -74,17 +74,17 @@ test('date range is inclusive for daily logs and includes overlapping voyages', 
   assert.equal(voyageInDateRange(voyage(), '2026-05-31', '2026-06-30'), false);
 });
 
-test('manual voyage fuel overrides replace calculated ME and all-AE values', () => {
+test('manual voyage fuel overrides replace calculated ME and Other Fuel values', () => {
   const logs = [
     manualInputToDailyLog(manual('2026-05-29')),
     manualInputToDailyLog(manual('2026-05-30')),
   ];
   const [result] = calculateVoyages(logs, [voyage({
     mainEngineFuelOverride: 1_250.5,
-    auxiliaryEngineFuelOverride: 475.25,
+    otherFuelOverride: 475.25,
   })]);
 
   assert.equal(result.mainEngineFuel, 1_250.5);
-  assert.equal(result.auxiliaryEngineFuel, 475.25);
+  assert.equal(result.otherFuel, 475.25);
   assert.equal(result.totalFuel, 1_725.75);
 });

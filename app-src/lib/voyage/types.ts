@@ -47,7 +47,13 @@ export interface VoyageDefinition {
   arrival: string;
   distance: number;
   averageSpeed: number;
+  status?: 'planned' | 'underway' | 'paused' | 'completed' | 'aborted';
+  source?: 'template' | 'manual' | 'suggested';
+  confirmed?: boolean;
+  interruptionReason?: string;
   mainEngineFuelOverride?: number | null;
+  otherFuelOverride?: number | null;
+  /** @deprecated Kept only so histories saved before the Other Fuel rule still load. */
   auxiliaryEngineFuelOverride?: number | null;
 }
 
@@ -64,7 +70,11 @@ export interface ManualDailyLogInput {
 }
 export interface VoyageResult extends VoyageDefinition {
   transitHours: number;
+  mainEngineRunningHours: number;
+  interruptionHours: number;
   mainEngineFuel: number;
+  otherFuel: number;
+  /** @deprecated Alias of otherFuel for histories created before the Other Fuel rule. */
   auxiliaryEngineFuel: number;
   totalFuel: number;
   averageBurn: number;

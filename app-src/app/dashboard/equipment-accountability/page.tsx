@@ -20,10 +20,11 @@ import { toast } from 'sonner';
 import { accountabilityFormSchema, AccountabilityFormValues } from '@/lib/validations/formSchema';
 import { CopyType } from '@/types/form';
 import { cn } from '@/lib/utils';
-import { firestore, auth } from '@/lib/firebase/client';
+import { firestore } from '@/lib/firebase/client';
 import { useAuth } from '@/lib/firebase/AuthContext';
 import { authenticatedFetch } from '@/lib/firebase/authenticatedFetch';
-import { collection, onSnapshot, query, orderBy, doc, setDoc, deleteDoc, where } from 'firebase/firestore';
+import { diffEquipmentReports, equipmentChangeSummary } from '@/lib/equipment/changeTracking';
+import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { EquipmentCodeScanner } from '@/components/form/EquipmentCodeScanner';
 import { classifyEquipmentSerial, FloaterType, nextEmptyIndex, nextFloaterIndex } from '@/lib/equipmentScanner';
 
@@ -301,12 +302,14 @@ function EquipmentAccountabilityContent() {
     const q = query(collection(firestore, 'reports'), orderBy('createdAt', 'desc'));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      setSavedReports(snapshot.docs.map(doc => ({
-        id: doc.id,
-        vesselName: doc.data().vesselInfo?.vesselName || 'Unnamed Vessel',
-        installationDate: doc.data().vesselInfo?.installationDate || '',
-        data: doc.data(),
-      })));
+      setSavedReports(snapshot.docs
+        .filter((snapshotDoc) => snapshotDoc.data().archived !== true)
+        .map((snapshotDoc) => ({
+          id: snapshotDoc.id,
+          vesselName: snapshotDoc.data().vesselInfo?.vesselName || 'Unnamed Vessel',
+          installationDate: snapshotDoc.data().vesselInfo?.installationDate || '',
+          data: snapshotDoc.data(),
+        })));
     }, (error) => console.error('Error listening to reports:', error));
     return () => unsubscribe();
   }, [user]);
@@ -493,18 +496,69 @@ function EquipmentAccountabilityContent() {
     setValue('copyTypes', current.includes(ct) ? current.filter(c => c !== ct) : [...current, ct], { shouldValidate: true });
   };
 
+  const confirmEquipmentChange = (
+    before: Record<string, unknown> | null,
+    after: Record<string, unknown> | null,
+    actionLabel: string,
+  ) => {
+    const changes = diffEquipmentReports(before, after);
+    const summary = equipmentChangeSummary(changes);
+    if (!window.confirm(`${actionLabel}
+
+Detected equipment / Inventory impact:
+${summary}
+
+Continue and provide a reason?`)) return null;
+    const reason = window.prompt('Reason for this change (required for the audit trail):', actionLabel);
+    if (!reason?.trim() || reason.trim().length < 3) {
+      toast.error('A reason of at least 3 characters is required.');
+      return null;
+    }
+    const hasRemovedEquipment = changes.some((change) => change.removed.length > 0);
+    let disposition = 'returned-working';
+    if (hasRemovedEquipment) {
+      const answer = window.prompt(
+        'Disposition for removed equipment: returned-working, returned-defective, lost, replacement, or correction',
+        'returned-working',
+      );
+      const allowed = ['returned-working', 'returned-defective', 'lost', 'replacement', 'correction'];
+      if (!answer || !allowed.includes(answer.trim().toLowerCase())) {
+        toast.error('Choose a valid disposition for the removed equipment.');
+        return null;
+      }
+      disposition = answer.trim().toLowerCase();
+    }
+    return { reason: reason.trim(), disposition, changes };
+  };
+
+  const submitEquipmentChange = async (payload: Record<string, unknown>) => {
+    const response = await authenticatedFetch('/api/equipment-report-change', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const text = await response.text();
+    let result: { error?: string; reportId?: string } = {};
+    if (text) {
+      try { result = JSON.parse(text) as typeof result; }
+      catch { throw new Error(response.ok ? 'The server returned an invalid response.' : text); }
+    }
+    if (!response.ok) throw new Error(result.error ?? 'Unable to save the equipment change.');
+    return result;
+  };
+
   const handleSaveNewReport = async () => {
     const values = watch();
     if (!values.vesselInfo?.vesselName) { toast.error('Vessel Name / IMO No. is required to save a report'); return; }
     if (!checkDuplicateSns(values)) return;
-    if (!window.confirm('Are you sure you want to save these details?')) return;
+    const confirmation = confirmEquipmentChange(null, values as unknown as Record<string, unknown>, 'Initial equipment deployment');
+    if (!confirmation) return;
     setSaving(true);
     try {
-      const payload = { ...values, createdAt: new Date(), uid: auth?.currentUser?.uid ?? null };
-      const docId = values.vesselInfo.vesselName.trim().replace(/\//g, '-');
-      await setDoc(doc(firestore, 'reports', docId), payload, { merge: true });
+      const docId = values.vesselInfo.vesselName.trim().replace(/[\/\\?%*:|"<>]/g, '-');
+      await submitEquipmentChange({ action: 'create', reportId: docId, report: values, ...confirmation });
       setSelectedReportId(docId);
-      toast.success('Report saved as new vessel successfully!');
+      toast.success('Report saved and Inventory deployment ledger updated.');
     } catch (e: unknown) {
       toast.error('Failed to save report', { description: e instanceof Error ? e.message : 'Unknown error' });
     } finally { setSaving(false); }
@@ -512,20 +566,17 @@ function EquipmentAccountabilityContent() {
 
   const handleUpdateReport = async () => {
     if (!selectedReportId) { toast.error('No vessel selected to update'); return; }
+    const selected = savedReports.find((report) => report.id === selectedReportId);
+    if (!selected) { toast.error('The selected vessel report is no longer available.'); return; }
     const values = watch();
     if (!values.vesselInfo?.vesselName) { toast.error('Vessel Name / IMO No. is required'); return; }
     if (!checkDuplicateSns(values, selectedReportId)) return;
-    if (!window.confirm('Are you sure you want to save these details?')) return;
+    const confirmation = confirmEquipmentChange(selected.data, values as unknown as Record<string, unknown>, 'Update vessel equipment');
+    if (!confirmation) return;
     setSaving(true);
     try {
-      const payload = { ...values, createdAt: new Date(), uid: auth?.currentUser?.uid ?? null };
-      const docId = values.vesselInfo.vesselName.trim().replace(/\//g, '-');
-      if (selectedReportId !== docId) {
-        try { await deleteDoc(doc(firestore, 'reports', selectedReportId)); } catch {}
-      }
-      await setDoc(doc(firestore, 'reports', docId), payload, { merge: true });
-      setSelectedReportId(docId);
-      toast.success('Vessel details updated successfully!');
+      await submitEquipmentChange({ action: 'update', reportId: selectedReportId, report: values, ...confirmation });
+      toast.success('Equipment changes confirmed, audited, and synchronized to Inventory.');
     } catch (e: unknown) {
       toast.error('Failed to update report', { description: e instanceof Error ? e.message : 'Unknown error' });
     } finally { setSaving(false); }
@@ -533,14 +584,17 @@ function EquipmentAccountabilityContent() {
 
   const handleDeleteReport = async () => {
     if (!selectedReportId) return;
-    if (!window.confirm(`Are you sure you want to delete ${selectedReportId}?`)) return;
+    const selected = savedReports.find((report) => report.id === selectedReportId);
+    if (!selected) return;
+    const confirmation = confirmEquipmentChange(selected.data, null, `Archive ${selected.vesselName}`);
+    if (!confirmation) return;
     setSaving(true);
     try {
-      await deleteDoc(doc(firestore, 'reports', selectedReportId));
-      toast.success('Vessel deleted successfully!');
+      await submitEquipmentChange({ action: 'archive', reportId: selectedReportId, ...confirmation });
+      toast.success('Vessel archived. Its equipment was removed from active deployment and logged.');
       handleClear();
     } catch (e: unknown) {
-      toast.error('Failed to delete vessel', { description: e instanceof Error ? e.message : 'Unknown error' });
+      toast.error('Failed to archive vessel', { description: e instanceof Error ? e.message : 'Unknown error' });
     } finally { setSaving(false); }
   };
 
@@ -701,7 +755,7 @@ function EquipmentAccountabilityContent() {
               {selectedReportId && (
                 <div className="flex gap-2 animate-fadeInUp w-full md:w-auto">
                   <Button type="button" variant="outline" onClick={handleUpdateReport} disabled={saving || loading} className="h-10 px-4 text-xs font-semibold rounded-lg bg-blue-600 border-blue-700 text-white hover:bg-blue-500 flex-1 md:flex-none">Update Selected</Button>
-                  <Button type="button" variant="outline" onClick={handleDeleteReport} disabled={saving || loading} className="h-10 px-4 text-xs font-semibold rounded-lg bg-red-700 border-red-800 text-white hover:bg-red-600 flex-1 md:flex-none">Delete Vessel</Button>
+                  <Button type="button" variant="outline" onClick={handleDeleteReport} disabled={saving || loading} className="h-10 px-4 text-xs font-semibold rounded-lg bg-red-700 border-red-800 text-white hover:bg-red-600 flex-1 md:flex-none">Archive Vessel</Button>
                 </div>
               )}
             </div>

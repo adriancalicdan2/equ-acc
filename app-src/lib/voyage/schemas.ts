@@ -16,8 +16,8 @@ export const manualDailyLogInputSchema = z.object({
   portHours: z.number().finite().min(0).max(24),
   starboardHours: z.number().finite().min(0).max(24),
   mainEngineFuel: boundedNumber,
-  auxiliaryEngineFuel: boundedNumber,
-  otherFuel: boundedNumber,
+  auxiliaryEngineFuel: boundedNumber.default(0),
+  otherFuel: boundedNumber.default(0),
 });
 
 export const voyageDefinitionSchema = z.object({
@@ -30,7 +30,12 @@ export const voyageDefinitionSchema = z.object({
   arrival: z.iso.datetime(),
   distance: z.number().finite().min(0).max(100_000),
   averageSpeed: z.number().finite().min(0).max(1_000),
+  status: z.enum(['planned', 'underway', 'paused', 'completed', 'aborted']).default('completed'),
+  source: z.enum(['template', 'manual', 'suggested']).default('manual'),
+  confirmed: z.boolean().default(true),
+  interruptionReason: z.string().trim().max(1_000).default(''),
   mainEngineFuelOverride: boundedNumber.nullish(),
+  otherFuelOverride: boundedNumber.nullish(),
   auxiliaryEngineFuelOverride: boundedNumber.nullish(),
 });
 

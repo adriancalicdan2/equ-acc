@@ -16,7 +16,9 @@ export function manualInputToDailyLog(
   input: ManualDailyLogInput,
   vesselName = '',
 ): DailyLogRecord {
-  const ancillaryFuel = rounded(input.auxiliaryEngineFuel + input.otherFuel);
+  // Older saved entries may still have auxiliaryEngineFuel. Fold it into
+  // Other Fuel so the current model never depends on a particular AE number.
+  const ancillaryFuel = rounded((input.auxiliaryEngineFuel ?? 0) + input.otherFuel);
   return {
     source: 'manual',
     fileName: `Manual entry ${input.id}`,

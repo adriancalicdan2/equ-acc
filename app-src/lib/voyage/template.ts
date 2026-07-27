@@ -6,7 +6,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { DailyLogRecord, VoyageDefinition, VoyageResult } from './types';
 
-const TEMPLATE_NAME = 'Vessel_Daily_Logs_&Voyage.xlsx';
+const TEMPLATE_NAME = 'Daily_Logs_&Voyage.xlsx';
 
 const CHART_PARTS = [
   'xl/drawings/drawing1.xml',
@@ -38,6 +38,7 @@ function addDrawingReference(worksheetXml: string, relationshipId: string) {
   if (/<drawing\s/.test(worksheetXml)) return worksheetXml;
   return worksheetXml.replace('</worksheet>', `<drawing r:id="${relationshipId}"/></worksheet>`);
 }
+
 
 function updateChartRange(
   chartXml: string,
@@ -134,7 +135,7 @@ async function preserveTemplateCharts(
   dailyChart = refreshDailyChartSeries(
     dailyChart,
     'G',
-    'Generator / Other',
+    'Other Fuel',
     dailyCategories,
     dailyLogs.map((daily) => daily.ancillaryFuel),
   );
@@ -271,6 +272,10 @@ export async function loadVoyageTemplateData() {
       arrival,
       distance: Number(row.getCell(11).value ?? 0),
       averageSpeed: Number(row.getCell(12).value ?? 0),
+      status: 'completed',
+      source: 'template',
+      confirmed: true,
+      interruptionReason: '',
     });
   }
 
@@ -305,13 +310,18 @@ export async function generateVoyageWorkbook(
 
   const sourceVoyageStyleRow = 5;
   const sourceVoyageTotalStyleRow = 39;
+  for (let rowNumber = 5; rowNumber <= 38; rowNumber += 2) {
+    if (voyageSheet.getCell(`A${rowNumber}`).isMerged) voyageSheet.unMergeCells(`A${rowNumber}:A${rowNumber + 1}`);
+  }
+  if (voyageSheet.getCell('A39').isMerged) voyageSheet.unMergeCells('A39:E39');
   for (let rowNumber = 5; rowNumber <= 250; rowNumber += 1) {
     for (let column = 1; column <= 13; column += 1) voyageSheet.getCell(rowNumber, column).value = null;
   }
   const reportVessel = vesselName.trim();
   voyageSheet.getCell('A1').value = `${reportVessel.toUpperCase()} \u2014 FUEL CONSUMPTION REPORT \u2014 ${voyages.length} VOYAGES`;
   voyageSheet.getCell('A3').value =
-    `${reportVessel} \u2014 ME fuel uses each exact voyage window; all AE fuel is combined per day, used in full for one-day voyages, and averaged across multi-day voyages.`;
+    `${reportVessel} \u2014 ME fuel uses the confirmed voyage window. Other Fuel combines all AEs and other machines: full daily total for one-day voyages, average for multi-day voyages.`;
+  voyageSheet.getCell('H4').value = 'Other Fuel (L)';
 
   voyages.forEach((voyage, index) => {
     const rowNumber = 5 + index;
@@ -324,7 +334,7 @@ export async function generateVoyageWorkbook(
     row.getCell(5).value = excelDate(voyage.arrival);
     row.getCell(6).value = voyage.transitHours;
     row.getCell(7).value = voyage.mainEngineFuel;
-    row.getCell(8).value = voyage.auxiliaryEngineFuel;
+    row.getCell(8).value = voyage.otherFuel;
     row.getCell(9).value = { formula: `G${rowNumber}+H${rowNumber}`, result: voyage.totalFuel };
     row.getCell(10).value = {
       formula: `IFERROR(I${rowNumber}/F${rowNumber},0)`,
@@ -340,23 +350,33 @@ export async function generateVoyageWorkbook(
     row.getCell(5).numFmt = 'mmm d, yyyy hh:mm:ss';
   });
 
+  voyages.forEach((voyage, index) => {
+    const next = voyages[index + 1];
+    if (voyage.displayCycle && next?.cycle === voyage.cycle) {
+      const rowNumber = 5 + index;
+      voyageSheet.mergeCells(`A${rowNumber}:A${rowNumber + 1}`);
+      voyageSheet.getCell(`A${rowNumber}`).value = voyage.cycle;
+    }
+  });
+
   const voyageTotalRow = 5 + voyages.length;
   copyRowStyle(voyageSheet, sourceVoyageTotalStyleRow, voyageTotalRow);
+  voyageSheet.mergeCells(`A${voyageTotalRow}:E${voyageTotalRow}`);
   voyageSheet.getCell(voyageTotalRow, 1).value = 'TOTAL / OVERALL';
   const voyageTotals = voyages.reduce(
     (totals, voyage) => ({
       transitHours: totals.transitHours + voyage.transitHours,
       mainEngineFuel: totals.mainEngineFuel + voyage.mainEngineFuel,
-      auxiliaryEngineFuel: totals.auxiliaryEngineFuel + voyage.auxiliaryEngineFuel,
+      otherFuel: totals.otherFuel + voyage.otherFuel,
       totalFuel: totals.totalFuel + voyage.totalFuel,
       distance: totals.distance + voyage.distance,
     }),
-    { transitHours: 0, mainEngineFuel: 0, auxiliaryEngineFuel: 0, totalFuel: 0, distance: 0 },
+    { transitHours: 0, mainEngineFuel: 0, otherFuel: 0, totalFuel: 0, distance: 0 },
   );
   const voyageColumnTotals = {
     F: voyageTotals.transitHours,
     G: voyageTotals.mainEngineFuel,
-    H: voyageTotals.auxiliaryEngineFuel,
+    H: voyageTotals.otherFuel,
     I: voyageTotals.totalFuel,
     K: voyageTotals.distance,
   } as const;
@@ -391,6 +411,7 @@ export async function generateVoyageWorkbook(
     for (let column = 1; column <= 10; column += 1) dailySheet.getCell(rowNumber, column).value = null;
   }
   dailySheet.getCell('A1').value = `${reportVessel.toUpperCase()} \u2014 Port-to-Port Fuel Consumption`;
+  dailySheet.getCell('G4').value = 'Other Fuel\n(L)';
   if (sortedDaily.length > 0) {
     const firstDate = new Date(`${sortedDaily[0].date}T00:00:00Z`);
     const lastDate = new Date(`${sortedDaily.at(-1)?.date}T00:00:00Z`);

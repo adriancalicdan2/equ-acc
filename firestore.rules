@@ -71,6 +71,16 @@ service cloud.firestore {
       allow read, write: if isAdmin() || canView('inventory');
     }
 
+    match /equipmentChangeLogs/{changeId} {
+      allow read: if isAdmin() || canView('equipment-accountability') || canView('inventory');
+      allow write: if false;
+    }
+
+    match /inventoryMovements/{movementId} {
+      allow read: if isAdmin() || canView('equipment-accountability') || canView('inventory');
+      allow write: if false;
+    }
+
     match /timecards/{userId}/{month}/{period} {
       allow read, write: if isAdmin() || (
         canView('time-card') && request.auth.uid == userId
