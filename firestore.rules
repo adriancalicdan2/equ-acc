@@ -69,16 +69,20 @@ service cloud.firestore {
 
     match /inventory/{itemId} {
       allow read, write: if isAdmin() || canView('inventory');
+      allow update: if canView('equipment-accountability')
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['defectiveLog', 'lostLog']);
     }
 
     match /equipmentChangeLogs/{changeId} {
       allow read: if isAdmin() || canView('equipment-accountability') || canView('inventory');
-      allow write: if false;
+      allow create: if canView('equipment-accountability') && isOwner(request.resource.data);
+      allow update, delete: if false;
     }
 
     match /inventoryMovements/{movementId} {
       allow read: if isAdmin() || canView('equipment-accountability') || canView('inventory');
-      allow write: if false;
+      allow create: if canView('equipment-accountability') && isOwner(request.resource.data);
+      allow update, delete: if false;
     }
 
     match /timecards/{userId}/{month}/{period} {
