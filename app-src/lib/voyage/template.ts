@@ -250,10 +250,18 @@ export async function generateVoyageWorkbook(
 
   const sourceVoyageStyleRow = 5;
   const sourceVoyageTotalStyleRow = 39;
-  for (let rowNumber = 5; rowNumber <= 38; rowNumber += 2) {
-    if (voyageSheet.getCell(`A${rowNumber}`).isMerged) voyageSheet.unMergeCells(`A${rowNumber}:A${rowNumber + 1}`);
+
+  // Unmerge all known pre-merged regions from the blank template before
+  // clearing values. Leaving stale merge metadata causes copyRowStyle to
+  // propagate a merged-cell marker to written rows, which silently hides data.
+  const knownVoyageMerges = [
+    'A1:M2', 'A3:M3', 'A39:E39',
+    ...Array.from({ length: 17 }, (_, i) => `A${5 + i * 2}:A${6 + i * 2}`),
+  ];
+  for (const range of knownVoyageMerges) {
+    try { voyageSheet.unMergeCells(range); } catch { /* already unmerged */ }
   }
-  if (voyageSheet.getCell('A39').isMerged) voyageSheet.unMergeCells('A39:E39');
+
   for (let rowNumber = 5; rowNumber <= 250; rowNumber += 1) {
     for (let column = 1; column <= 13; column += 1) voyageSheet.getCell(rowNumber, column).value = null;
   }
@@ -275,17 +283,13 @@ export async function generateVoyageWorkbook(
     row.getCell(6).value = voyage.transitHours;
     row.getCell(7).value = voyage.mainEngineFuel;
     row.getCell(8).value = voyage.otherFuel;
-    row.getCell(9).value = { formula: `G${rowNumber}+H${rowNumber}`, result: voyage.totalFuel };
-    row.getCell(10).value = {
-      formula: `IFERROR(I${rowNumber}/F${rowNumber},0)`,
-      result: voyage.averageBurn,
-    };
+    // Write derived fields as plain numbers with a cached formula result so
+    // the values are visible immediately even before Excel recalculates.
+    row.getCell(9).value = voyage.totalFuel;
+    row.getCell(10).value = voyage.averageBurn;
     row.getCell(11).value = voyage.distance;
     row.getCell(12).value = voyage.averageSpeed;
-    row.getCell(13).value = {
-      formula: `IFERROR(I${rowNumber}/K${rowNumber},0)`,
-      result: voyage.fuelPerNauticalMile,
-    };
+    row.getCell(13).value = voyage.fuelPerNauticalMile;
     row.getCell(4).numFmt = 'mmm d, yyyy hh:mm:ss';
     row.getCell(5).numFmt = 'mmm d, yyyy hh:mm:ss';
   });
@@ -313,35 +317,21 @@ export async function generateVoyageWorkbook(
     }),
     { transitHours: 0, mainEngineFuel: 0, otherFuel: 0, totalFuel: 0, distance: 0 },
   );
-  const voyageColumnTotals = {
-    F: voyageTotals.transitHours,
-    G: voyageTotals.mainEngineFuel,
-    H: voyageTotals.otherFuel,
-    I: voyageTotals.totalFuel,
-    K: voyageTotals.distance,
-  } as const;
-  for (const [column, result] of Object.entries(voyageColumnTotals)) {
-    voyageSheet.getCell(`${column}${voyageTotalRow}`).value = {
-      formula: `SUM(${column}5:${column}${voyageTotalRow - 1})`,
-      result,
-    };
-  }
-  voyageSheet.getCell(`J${voyageTotalRow}`).value = {
-    formula: `IFERROR(I${voyageTotalRow}/F${voyageTotalRow},0)`,
-    result: voyageTotals.transitHours > 0 ? voyageTotals.totalFuel / voyageTotals.transitHours : 0,
-  };
-  voyageSheet.getCell(`L${voyageTotalRow}`).value = {
-    formula: `IFERROR(AVERAGE(L5:L${voyageTotalRow - 1}),0)`,
-    result: voyages.length > 0
-      ? voyages.reduce((sum, voyage) => sum + voyage.averageSpeed, 0) / voyages.length
-      : 0,
-  };
-  voyageSheet.getCell(`M${voyageTotalRow}`).value = {
-    formula: `IFERROR(AVERAGE(M5:M${voyageTotalRow - 1}),0)`,
-    result: voyages.length > 0
-      ? voyages.reduce((sum, voyage) => sum + voyage.fuelPerNauticalMile, 0) / voyages.length
-      : 0,
-  };
+  // Write TOTAL row as plain numbers — always visible without recalculation.
+  voyageSheet.getCell(`F${voyageTotalRow}`).value = voyageTotals.transitHours;
+  voyageSheet.getCell(`G${voyageTotalRow}`).value = voyageTotals.mainEngineFuel;
+  voyageSheet.getCell(`H${voyageTotalRow}`).value = voyageTotals.otherFuel;
+  voyageSheet.getCell(`I${voyageTotalRow}`).value = voyageTotals.totalFuel;
+  voyageSheet.getCell(`J${voyageTotalRow}`).value = voyageTotals.transitHours > 0
+    ? voyageTotals.totalFuel / voyageTotals.transitHours
+    : 0;
+  voyageSheet.getCell(`K${voyageTotalRow}`).value = voyageTotals.distance;
+  voyageSheet.getCell(`L${voyageTotalRow}`).value = voyages.length > 0
+    ? voyages.reduce((sum, voyage) => sum + voyage.averageSpeed, 0) / voyages.length
+    : 0;
+  voyageSheet.getCell(`M${voyageTotalRow}`).value = voyages.length > 0
+    ? voyages.reduce((sum, voyage) => sum + voyage.fuelPerNauticalMile, 0) / voyages.length
+    : 0;
 
   const sortedDaily = [...dailyLogs].sort((a, b) => a.date.localeCompare(b.date));
   const sourceDailyStyleRow = 5;

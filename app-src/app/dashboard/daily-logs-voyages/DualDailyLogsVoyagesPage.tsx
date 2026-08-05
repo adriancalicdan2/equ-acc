@@ -969,9 +969,9 @@ export default function DualDailyLogsVoyagesPage() {
                   <Button type="button" variant="destructive" onClick={() => deleteDailyDates(new Set(selectedDates))} disabled={selectedDates.size === 0} className="gap-2"><Trash2 className="h-4 w-4" />Delete selected</Button>
                 </div>
               </div>
-              <div className="overflow-x-auto rounded-xl border border-border/60">
+              <div className="max-h-[420px] overflow-auto rounded-xl border border-border/60">
                 <table className="min-w-[1120px] w-full text-xs">
-                  <thead className="bg-muted/40 text-muted-foreground">
+                  <thead className="sticky top-0 z-10 bg-muted/80 text-muted-foreground backdrop-blur">
                     <tr>
                       <th className="w-10 px-3 py-3 text-left">
                         <input
@@ -1044,11 +1044,11 @@ export default function DualDailyLogsVoyagesPage() {
                   No voyage yet. Add one manually or create reviewable suggestions from the uploaded ME intervals.
                 </div>
               ) : (
-                <div className="overflow-x-auto rounded-xl border border-border/60">
-                  <table className="min-w-[2260px] w-full text-xs">
-                    <thead className="bg-muted/40 text-muted-foreground">
+                <div className="max-h-[560px] overflow-auto rounded-xl border border-border/60">
+                  <table className="min-w-[2160px] w-full text-xs">
+                    <thead className="sticky top-0 z-10 bg-muted/80 text-muted-foreground backdrop-blur">
                       <tr>
-                        {['Voyage', 'Confirmed', 'Cycle', 'From', 'To', 'Departure', 'Arrival', 'Window h', 'ME running h', 'Gap h', 'ME fuel (editable)', 'Other Fuel (editable)', 'Total', 'Distance', 'Speed', 'Fuel/nm', 'Voyage status', 'Interruption / change reason', 'Actions'].map((heading) => (
+                        {['Voyage', 'Cycle', 'From', 'To', 'Departure', 'Arrival', 'Window h', 'ME running h', 'Gap h', 'ME fuel (editable)', 'Other Fuel (editable)', 'Total', 'Distance', 'Speed', 'Fuel/nm', 'Voyage status', 'Interruption / change reason', 'Actions'].map((heading) => (
                           <th key={heading} className="px-2 py-3 text-left font-semibold">{heading}</th>
                         ))}
                       </tr>
@@ -1057,17 +1057,29 @@ export default function DualDailyLogsVoyagesPage() {
                       {filteredVoyages.map((voyage, voyageIndex) => {
                         const mainOverridden = voyage.mainEngineFuelOverride != null;
                         const otherOverridden = voyage.otherFuelOverride != null || voyage.auxiliaryEngineFuelOverride != null;
+                        const isConfirmed = voyage.confirmed !== false;
                         return (
-                          <tr key={voyage.id} className="border-t border-border/40 align-top hover:bg-muted/20">
+                          <tr key={voyage.id} className={cn('border-t border-border/40 align-top hover:bg-muted/20', isConfirmed && 'bg-emerald-500/5')}>
                             <td className="px-2 py-2.5">
                               <p className="font-semibold text-primary">{voyage.id}</p>
                               <p className="mt-1 text-[10px] uppercase text-muted-foreground">{voyage.source ?? 'saved'}</p>
-                            </td>
-                            <td className="px-2 py-2.5">
-                              <label className="inline-flex items-center gap-2 whitespace-nowrap">
-                                <input type="checkbox" checked={voyage.confirmed !== false} onChange={(event) => updateDefinition(voyage.id, 'confirmed', event.target.checked)} className="h-4 w-4 accent-primary" />
-                                {voyage.confirmed !== false ? 'Yes' : 'Review'}
-                              </label>
+                              {isConfirmed ? (
+                                <button
+                                  type="button"
+                                  onClick={() => updateDefinition(voyage.id, 'confirmed', false)}
+                                  className="mt-1.5 flex items-center gap-1 rounded-md border border-sky-500/40 bg-sky-500/10 px-2 py-1 text-[10px] font-semibold text-sky-300 transition hover:bg-sky-500/20"
+                                >
+                                  <CheckCircle2 className="h-3 w-3" /> Edit
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => updateDefinition(voyage.id, 'confirmed', true)}
+                                  className="mt-1.5 flex items-center gap-1 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2 py-1 text-[10px] font-semibold text-emerald-300 transition hover:bg-emerald-500/20"
+                                >
+                                  <CheckCircle2 className="h-3 w-3" /> Confirm
+                                </button>
+                              )}
                             </td>
                             <td className="px-2 py-2.5">{voyage.cycle}</td>
                             <td className="px-1 py-1.5"><Input value={voyage.from} onChange={(event) => updateDefinition(voyage.id, 'from', event.target.value)} className="h-8 min-w-24 text-xs" /></td>
