@@ -37,6 +37,24 @@ async function requiredZipText(zip: JSZip, name: string) {
 
 function addDrawingReference(worksheetXml: string, relationshipId: string) {
   if (/<drawing\s/.test(worksheetXml)) return worksheetXml;
+  const insertBeforeTags = [
+    '<legacyDrawing',
+    '<legacyDrawingHF',
+    '<legacyDrawingInterop',
+    '<picture',
+    '<oleObjects',
+    '<controls',
+    '<webPublishItems',
+    '<tableParts',
+    '<extLst',
+    '</worksheet>'
+  ];
+  for (const tag of insertBeforeTags) {
+    const index = worksheetXml.indexOf(tag);
+    if (index !== -1) {
+      return worksheetXml.slice(0, index) + `<drawing r:id="${relationshipId}"/>` + worksheetXml.slice(index);
+    }
+  }
   return worksheetXml.replace('</worksheet>', `<drawing r:id="${relationshipId}"/></worksheet>`);
 }
 
