@@ -2,7 +2,7 @@ import type { DailyLogRecord, OperatingInterval, VoyageDefinition } from './type
 
 const HOUR_MS = 3_600_000;
 const SUGGESTION_GAP_HOURS = 2;
-const MIN_SUGGESTED_HOURS = 0.25;
+const MIN_SUGGESTED_HOURS = 10;
 
 interface TimedInterval {
   start: number;
