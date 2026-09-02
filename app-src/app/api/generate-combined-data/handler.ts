@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
       : 'all-dates';
     const filename = `${stem}-combined-data-${dateRange}.xlsx`;
 
-    return new NextResponse(buffer, {
+    return new NextResponse(Buffer.from(buffer), {
       status: 200,
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
