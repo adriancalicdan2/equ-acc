@@ -101,11 +101,18 @@ function normalizeComponentName(rawName: unknown) {
     .replace(/\s*#\s*/g, ' #')
     .replace(/^AE\s*(\d+)$/i, 'AE #$1');
   const label = normalizedLabel(name);
-  if (/^port me$/.test(label) || label.includes('port main engine')) return 'Port ME';
-  if (/^starboard me$/.test(label) || label.includes('starboard main engine')) return 'Starboard ME';
+  // "Port ME" / "Port Main Engine" (canonical) or "Main Engine Port" (NTC/LAWIN variant)
+  if (/^port me$/.test(label) || label.includes('port main engine') || /\bmain engine\s+port\b/.test(label)) return 'Port ME';
+  // "Starboard ME" / "Starboard Main Engine" or "Main Engine Starboard"
+  if (/^starboard me$/.test(label) || label.includes('starboard main engine') || /\bmain engine\s+starboard\b/.test(label)) return 'Starboard ME';
+  // Numbered AE: "AE 1", "AE #2", "Auxiliary Engine 3"
   const ae = label.match(/^(?:ae|auxiliary engine)\s*#?\s*(\d+)/);
   if (ae) return `AE #${ae[1]}`;
-  if (label.includes('emergency engine')) return 'Emergency Engine';
+  // Emergency engine must be checked before the generic aux-engine catch-all;
+  // also matches variants like "Emergency Aux Engine" where other words separate them
+  if (/\bemergency\b/i.test(name) && /\bengine\b/i.test(name)) return 'Emergency Engine';
+  // Named/side auxiliary engines: "Port Aux Engine", "Starboard Aux Engine"
+  if (/\baux(?:iliary)?\s+engine\b/i.test(name)) return `AE (${name.trim()})`;
   return name;
 }
 
@@ -113,6 +120,8 @@ function componentCategory(name: string): ComponentCategory {
   if (name === 'Port ME') return 'port-main-engine';
   if (name === 'Starboard ME') return 'starboard-main-engine';
   if (/^AE #\d+$/i.test(name)) return 'auxiliary-engine';
+  // AE (...) wraps named aux engines; exclude any that contain "emergency"
+  if (/^AE \(.+\)$/.test(name) && !/emergency/i.test(name)) return 'auxiliary-engine';
   if (/emergency engine/i.test(name)) return 'emergency-engine';
   return 'other';
 }
