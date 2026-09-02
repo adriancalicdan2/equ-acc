@@ -158,6 +158,7 @@ export default function DualDailyLogsVoyagesPage() {
   const [dateTo, setDateTo] = useState('');
   const [analyzing, setAnalyzing] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [generatingCombined, setGeneratingCombined] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historySaving, setHistorySaving] = useState(false);
   const [selectedDates, setSelectedDates] = useState<Set<string>>(new Set());
@@ -703,6 +704,42 @@ export default function DualDailyLogsVoyagesPage() {
     }
   };
 
+  const generateCombinedData = async () => {
+    if (!vesselName.trim()) {
+      toast.error('Enter the vessel name before generating.');
+      return;
+    }
+    if (dailyLogs.length === 0) {
+      toast.error('Add daily values or upload Excel files first.');
+      return;
+    }
+    setGeneratingCombined(true);
+    try {
+      const body = formDataWithFiles();
+      body.append('vesselName', vesselName.trim());
+      body.append('manualLogs', JSON.stringify(manualInputs));
+      body.append('savedLogs', JSON.stringify(savedLogs));
+      const response = await authenticatedFetch('/api/generate-combined-data', { method: 'POST', body });
+      if (!response.ok) {
+        const payload = await readApiJson<{ error?: string }>(response);
+        throw new Error(payload.error ?? 'Combined data generation failed.');
+      }
+      const generatedDailyCount = Number(response.headers.get('X-AIMF-Daily-Count'));
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `${vesselFileStem(vesselName)}-combined-data.xlsx`;
+      anchor.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
+      toast.success(`Downloaded combined data for ${generatedDailyCount} daily log${generatedDailyCount === 1 ? '' : 's'}.`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to generate the combined data workbook.');
+    } finally {
+      setGeneratingCombined(false);
+    }
+  };
+
   return (
     <div className="min-h-screen px-4 py-6 md:px-8 md:py-8">
       <div className="mx-auto max-w-[1600px] space-y-6">
@@ -719,10 +756,25 @@ export default function DualDailyLogsVoyagesPage() {
             </p>
           </div>
           {dailyLogs.length > 0 && (
-            <Button onClick={generate} disabled={generating || !rangeValid || !vesselName.trim()} className="h-11 gap-2 rounded-xl px-5 font-semibold">
-              {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-              {generating ? 'Generating…' : 'Download selected date range'}
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                onClick={generateCombinedData}
+                disabled={generatingCombined || !vesselName.trim()}
+                className="h-11 gap-2 rounded-xl px-5 font-semibold"
+              >
+                {generatingCombined ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4" />}
+                {generatingCombined ? 'Generating…' : 'Download Combined Data'}
+              </Button>
+              <Button
+                onClick={generate}
+                disabled={generating || !rangeValid || !vesselName.trim()}
+                className="h-11 gap-2 rounded-xl px-5 font-semibold"
+              >
+                {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                {generating ? 'Generating…' : 'Download selected date range'}
+              </Button>
+            </div>
           )}
         </header>
 
